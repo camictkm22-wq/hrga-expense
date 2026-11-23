@@ -30,8 +30,8 @@
 
     showLogin() {
       Sync.stop(); document.body.classList.remove('drawer');
-      const app = $('#app'); app.className = ''; app.innerHTML = '';
-      const root = document.createElement('div'); root.innerHTML = Views.login.render(); app.appendChild(root);
+      const app = $('#app'); app.className = 'is-login'; app.innerHTML = '';
+      const root = document.createElement('div'); root.style.width = '100%'; root.innerHTML = Views.login.render(); app.appendChild(root);
       Views.login.mount(root);
     },
 

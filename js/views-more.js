@@ -273,7 +273,7 @@
     },
     async mount(root) {
       const self = this;
-      const drawU = () => { $('#ut', root).innerHTML = '<table class="tbl-cards"><thead><tr><th>Nama</th><th>Email</th><th>Peran</th><th>WhatsApp</th><th>Status</th><th></th></tr></thead><tbody>' + Store.s.pengguna.map(u => '<tr><td data-l="Nama" class="bold">' + esc(u.nama) + '</td><td data-l="Email">' + esc(u.email) + '</td><td data-l="Peran">' + esc(u.peran) + '</td><td data-l="WA" class="tn">' + esc(u.noWa || '-') + '</td><td data-l="Status">' + (u.aktif ? '<span class="pill Final">Aktif</span>' : '<span class="pill Draft">Nonaktif</span>') + '</td><td class="nol r"><button class="btn sm" data-ue="' + esc(u.email) + '">' + icon('edit', 'sm') + '</button></td></tr>').join('') + '</tbody></table>'; };
+      const drawU = () => { $('#ut', root).innerHTML = '<table class="tbl-cards"><thead><tr><th>Nama</th><th>Email</th><th>Peran</th><th>WhatsApp</th><th>Sandi</th><th>Status</th><th></th></tr></thead><tbody>' + Store.s.pengguna.map(u => '<tr><td data-l="Nama" class="bold">' + esc(u.nama) + '</td><td data-l="Email">' + esc(u.email) + '</td><td data-l="Peran">' + esc(u.peran) + '</td><td data-l="WA" class="tn">' + esc(u.noWa || '-') + '</td><td data-l="Sandi">' + (u.adaSandi ? '✓' : '<span class="muted">–</span>') + '</td><td data-l="Status">' + (u.aktif ? '<span class="pill Final">Aktif</span>' : '<span class="pill Draft">Nonaktif</span>') + '</td><td class="nol r"><button class="btn sm" data-ue="' + esc(u.email) + '">' + icon('edit', 'sm') + '</button></td></tr>').join('') + '</tbody></table>'; };
       const drawA = () => {
         const q = AU.q.toLowerCase();
         const rows = self.audit.filter(a => !q || (a.aksi + ' ' + a.email + ' ' + a.detail).toLowerCase().includes(q));
@@ -298,11 +298,12 @@
         body: '<div class="row"><div class="field"><label>Email Google</label><input class="in" id="ue" type="email" value="' + esc(u ? u.email : '') + '" ' + (u ? 'readonly' : '') + '></div><div class="field"><label>Nama</label><input class="in" id="un" maxlength="80" value="' + esc(u ? u.nama : '') + '"></div>' +
           '<div class="row r2"><div class="field"><label>Peran</label><select class="in" id="up"><option ' + (u && u.peran === 'Admin HRGA' || !u ? 'selected' : '') + '>Admin HRGA</option><option ' + (u && u.peran === 'Administrator CMS' ? 'selected' : '') + '>Administrator CMS</option></select></div>' +
           '<div class="field"><label>WhatsApp</label><input class="in" id="uw" inputmode="tel" placeholder="0812…" value="' + esc(u ? u.noWa : '') + '"></div></div>' +
+          '<div class="field"><label>Sandi login manual ' + (u && u.adaSandi ? '<span class="pill Final">sudah diatur</span>' : '<span class="pill Draft">belum diatur</span>') + '</label><input class="in" id="us" type="password" autocomplete="new-password" placeholder="' + (u ? 'Kosongkan jika tidak diubah' : 'Minimal 8 karakter (opsional bila hanya pakai Google)') + '"></div>' +
           '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="chk" id="ua" ' + (!u || u.aktif ? 'checked' : '') + '> Akun aktif</label></div>',
         footer: '<button class="btn" data-close>Batal</button><button class="btn pri" id="ok">Simpan</button>',
         onMount: m => { m.querySelector('#ok').onclick = async ev => {
           btnBusy(ev.target, true);
-          try { const r = await Api.call('pengguna.save', { email: m.querySelector('#ue').value, nama: m.querySelector('#un').value, peran: m.querySelector('#up').value, noWa: m.querySelector('#uw').value, aktif: m.querySelector('#ua').checked }); Store.s.pengguna = r.pengguna; Store.emit(); closeModal(); self.drawU(); toast('Pengguna tersimpan ✓', 'ok'); }
+          try { const r = await Api.call('pengguna.save', { email: m.querySelector('#ue').value, nama: m.querySelector('#un').value, peran: m.querySelector('#up').value, noWa: m.querySelector('#uw').value, sandi: m.querySelector('#us').value, aktif: m.querySelector('#ua').checked }); Store.s.pengguna = r.pengguna; Store.emit(); closeModal(); self.drawU(); toast('Pengguna tersimpan ✓', 'ok'); }
           catch (e) { toast(e.message, 'err'); btnBusy(ev.target, false); }
         }; }
       });

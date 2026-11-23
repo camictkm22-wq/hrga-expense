@@ -2,9 +2,9 @@
   "name": "HRGA Smart Expense & Settlement",
   "short_name": "HRGA Expense",
   "description": "Pengeluaran & settlement Admin HRGA",
-  "id": "./",
-  "start_url": "./",
-  "scope": "./",
+  "id": "/",
+  "start_url": "/?source=pwa",
+  "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#1E3350",
@@ -16,7 +16,7 @@
     { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
-    { "name": "Input pengeluaran", "url": "./#/expense-input" },
-    { "name": "Verifikasi", "url": "./#/verification" }
+    { "name": "Input pengeluaran", "url": "/#/expense-input" },
+    { "name": "Verifikasi", "url": "/#/verification" }
   ]
 }

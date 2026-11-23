@@ -26,25 +26,40 @@ window.Views = window.Views || {};
   // =========================================================
   Views.login = {
     title: 'Masuk',
-    render(ctx) {
+    render() {
       return '<div class="login"><div class="box">' +
         '<div class="logo">' + icon('wallet') + '</div>' +
         '<h1>' + esc(APP_CONFIG.APP_NAME) + '</h1><div class="muted">Sistem pengeluaran & settlement HRGA</div>' +
         '<div id="login-err"></div>' +
-        '<div id="g-btn" style="margin:22px 0 6px;min-height:44px;display:flex;justify-content:center"><div class="skel" style="width:240px;height:40px"></div></div>' +
-        '<div class="muted small" style="text-align:center">Gunakan akun Google yang terdaftar oleh Administrator.</div>' +
-        '<div id="em-wrap" class="hidden" style="margin-top:22px;border-top:1px solid var(--border);padding-top:16px">' +
+        '<form id="ml-form" style="display:grid;gap:12px;margin-top:20px" autocomplete="on">' +
+        '<div class="field"><label for="ml-email">Email</label><input class="in" id="ml-email" type="email" autocomplete="username" inputmode="email" placeholder="nama@perusahaan.com" required></div>' +
+        '<div class="field"><label for="ml-pass">Sandi</label><div style="position:relative"><input class="in" id="ml-pass" type="password" autocomplete="current-password" placeholder="Sandi Anda" required style="padding-right:64px"><button type="button" class="btn ghost sm" id="ml-eye" style="position:absolute;right:4px;top:5px">Lihat</button></div></div>' +
+        '<button class="btn pri" type="submit" id="ml-btn" style="min-height:44px">Masuk</button></form>' +
+        '<div id="g-wrap" class="hidden"><div style="display:flex;align-items:center;gap:10px;margin:18px 0;color:var(--text2);font-size:12px"><span style="flex:1;border-top:1px solid var(--border)"></span>atau<span style="flex:1;border-top:1px solid var(--border)"></span></div>' +
+        '<div id="g-btn" style="min-height:44px;display:flex;justify-content:center"></div></div>' +
+        '<div id="em-wrap" class="hidden" style="margin-top:18px;border-top:1px solid var(--border);padding-top:12px">' +
         '<button class="btn ghost sm" id="em-toggle" style="width:100%">' + icon('key', 'sm') + ' Akses darurat</button>' +
-        '<form id="em-form" style="margin-top:10px;display:none;gap:10px;flex-direction:column"><input class="in" type="password" id="em-pass" placeholder="Sandi akses darurat" autocomplete="current-password">' +
-        '<button class="btn pri" type="submit">Masuk darurat</button></form></div>' +
+        '<form id="em-form" style="margin-top:10px;display:none;gap:10px;flex-direction:column"><input class="in" type="password" id="em-pass" placeholder="Sandi akses darurat" autocomplete="off">' +
+        '<button class="btn" type="submit">Masuk darurat</button></form></div>' +
         '</div></div>';
     },
     async mount(root) {
       const err = msg => { $('#login-err', root).innerHTML = msg ? '<div class="denied">' + esc(msg) + '</div>' : ''; };
       if (App.loginMsg) { err(App.loginMsg); App.loginMsg = ''; }
+
+      // --- Login manual (selalu tersedia) ---
+      $('#ml-eye', root).onclick = () => { const i = $('#ml-pass', root), show = i.type === 'password'; i.type = show ? 'text' : 'password'; $('#ml-eye', root).textContent = show ? 'Sembunyi' : 'Lihat'; };
+      $('#ml-form', root).onsubmit = async ev => {
+        ev.preventDefault(); err('');
+        const b = $('#ml-btn', root); btnBusy(b, true, 'Memeriksa…');
+        try { const s = await Api.call('auth.manual', { email: $('#ml-email', root).value, password: $('#ml-pass', root).value }); App.onLogin(s); }
+        catch (e) { err(e.message === 'Failed to fetch' ? 'Tidak dapat terhubung ke server.' : e.message); btnBusy(b, false); }
+      };
+
+      // --- Opsi tambahan: konfigurasi server (Google + akses darurat) ---
       let cfg = {};
-      try { cfg = await Api.publicGet('auth.config'); } catch (e) { err(e.message === 'Failed to fetch' ? 'Tidak dapat terhubung ke server. Periksa GAS_URL di js/config.js.' : e.message); }
-      const clientId = APP_CONFIG.GOOGLE_CLIENT_ID || cfg.clientId;
+      try { cfg = await Api.publicGet('auth.config'); }
+      catch (e) { err('Tidak dapat terhubung ke server. Periksa GAS_URL di js/config.js dan deployment Apps Script.'); }
       if (cfg.emergencyEnabled) {
         $('#em-wrap', root).classList.remove('hidden');
         $('#em-toggle', root).onclick = () => { const f = $('#em-form', root); f.style.display = f.style.display === 'none' ? 'flex' : 'none'; };
@@ -55,8 +70,10 @@ window.Views = window.Views || {};
           catch (e) { err(e.message); btnBusy(b, false); }
         };
       }
+      const clientId = APP_CONFIG.GOOGLE_CLIENT_ID || cfg.clientId;
+      if (!clientId) return; // Google belum dikonfigurasi: cukup tampilkan login manual
+      $('#g-wrap', root).classList.remove('hidden');
       const gb = $('#g-btn', root);
-      if (!clientId) { gb.innerHTML = '<div class="muted small" style="text-align:center">Login Google belum dikonfigurasi (Client ID kosong).</div>'; return; }
       try {
         await loadScript('https://accounts.google.com/gsi/client');
         google.accounts.id.initialize({
@@ -67,9 +84,8 @@ window.Views = window.Views || {};
             catch (e) { gb.style.opacity = 1; err(e.message); }
           }
         });
-        gb.innerHTML = '';
         google.accounts.id.renderButton(gb, { theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill', width: 280, locale: 'id' });
-      } catch (e) { gb.innerHTML = '<div class="muted small">Gagal memuat Google Sign-In. Periksa koneksi.</div>'; }
+      } catch (e) { gb.innerHTML = '<div class="muted small">Gagal memuat Google Sign-In.</div>'; }
     }
   };
   function loadScript(src) {
