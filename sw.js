@@ -1,5 +1,5 @@
 /* Service worker: cache-first untuk cangkang aplikasi, jaringan langsung untuk API GAS. */
-const VERSION = 'hrga-v1.0.0';
+const VERSION = 'hrga-v1.1.0';
 const SHELL = [
   './', 'index.html', 'manifest.json', 'css/style.css',
   'js/config.js', 'js/api.js', 'js/ui.js', 'js/views-main.js', 'js/views-more.js', 'js/app.js',

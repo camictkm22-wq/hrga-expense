@@ -111,29 +111,37 @@ window.Views = window.Views || {};
       const months = [];
       for (let k = 5; k >= 0; k--) { const d = new Date(now.getFullYear(), now.getMonth() - k, 1); months.push({ key: d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2), label: BLN[d.getMonth()], v: 0 }); }
       items.forEach(i => { const m = months.find(x => String(i.tanggal).startsWith(x.key)); if (m) m.v += i.total; });
-      const max = Math.max(1, ...months.map(m => m.v));
-      const bars = months.map(m => '<div class="b"><em>' + (m.v ? (m.v >= 1e6 ? (m.v / 1e6).toFixed(1) + ' jt' : Math.round(m.v / 1e3) + ' rb') : '') + '</em><i style="height:' + Math.max(1, Math.round(m.v / max * 140)) + 'px"></i><span>' + m.label + '</span></div>').join('');
+      const max = Math.max(...months.map(m => m.v), 1);
+      const niceMax = v => { const mag = Math.pow(10, Math.floor(Math.log10(v))); for (const c of [1, 2, 2.5, 5, 10]) if (c * mag >= v) return c * mag; return 10 * mag; };
+      const top = niceMax(max);
+      const compact = n => n >= 1e9 ? (n / 1e9).toFixed(1).replace('.0', '') + ' M' : n >= 1e6 ? (n / 1e6).toFixed(1).replace('.0', '') + ' jt' : n >= 1e3 ? Math.round(n / 1e3) + ' rb' : String(Math.round(n));
+      const ticks = [0, 1, 2, 3, 4].map(k => ({ p: k * 25, v: top * k / 4 }));
+      const yAxis = ticks.map(t => '<span style="bottom:' + t.p + '%">' + (t.v ? compact(t.v) : '0') + '</span>').join('');
+      const grid = ticks.map(t => '<i class="gl" style="bottom:' + t.p + '%"></i>').join('');
+      const cols = months.map(m => { const h = m.v ? Math.max(1.5, m.v / top * 100) : 0; return '<div class="ch-col" title="' + m.label + ': ' + rp(m.v) + '">' + (m.v ? '<span class="ch-v" style="bottom:calc(' + h + '% + 4px)">' + compact(m.v) + '</span>' : '') + '<b class="ch-bar" style="height:' + h + '%"></b></div>'; }).join('');
+      const xAxis = months.map(m => '<span>' + m.label + '</span>').join('');
+      const barChart = '<div class="chart"><div class="ch-y">' + yAxis + '</div><div class="ch-plot">' + grid + '<div class="ch-bars">' + cols + '</div></div><div></div><div class="ch-x">' + xAxis + '</div></div>';
 
       // per kategori (bulan ini)
       const byCat = {};
       bulanIni.forEach(i => { byCat[i.kategori] = (byCat[i.kategori] || 0) + i.total; });
       const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
       let acc = 0; const stops = [];
-      cats.forEach(([k, v], idx) => { const p = v / (totalBulan || 1) * 100; stops.push(COLORS[idx % COLORS.length] + ' ' + acc + '% ' + (acc + p) + '%'); acc += p; });
-      const donut = cats.length ? '<div style="width:130px;height:130px;border-radius:50%;background:conic-gradient(' + stops.join(',') + ');position:relative;flex:none"><div style="position:absolute;inset:26px;background:#fff;border-radius:50%"></div></div>' : '';
-      const legend = cats.length ? cats.slice(0, 7).map(([k, v], idx) => '<div><i style="background:' + COLORS[idx % COLORS.length] + '"></i><span>' + esc(k) + '</span><b>' + rp(v) + '</b></div>').join('') : '<div class="muted">Belum ada pengeluaran bulan ini.</div>';
+      cats.forEach(([k, v], idx) => { const pc = v / (totalBulan || 1) * 100; stops.push(COLORS[idx % COLORS.length] + ' ' + acc + '% ' + (acc + pc) + '%'); acc += pc; });
+      const donut = cats.length ? '<div class="donut" style="background:conic-gradient(' + stops.join(',') + ')"><div class="dn-c"><small>Total</small><b>' + compact(totalBulan) + '</b></div></div>' : '';
+      const legend = cats.length ? cats.slice(0, 8).map(([k, v], idx) => '<div><i style="background:' + COLORS[idx % COLORS.length] + '"></i><span>' + esc(k) + '</span><em>' + (v / (totalBulan || 1) * 100).toFixed(1) + '%</em><b>' + rp(v) + '</b></div>').join('') : '<div class="muted">Belum ada pengeluaran bulan ini.</div>';
 
       const recent = items.slice().sort((a, b) => String(b.dibuatPada).localeCompare(String(a.dibuatPada))).slice(0, 6);
-      const rows = recent.map(i => '<tr data-go="#/item-list"><td>' + esc(i.deskripsi) + '<div class="muted small">' + fmtTgl(i.tanggal) + ' · ' + esc(i.kategori) + '</div></td><td class="r">' + rp(i.total) + '</td><td>' + pill(i.status) + '</td></tr>').join('');
+      const rows = recent.map(i => '<tr data-go="#/item-list"><td>' + esc(i.deskripsi) + '<div class="muted small">' + fmtTgl(i.tanggal) + ' · ' + esc(i.kategori) + '</div></td><td class="r">' + rp(i.total) + '</td><td>' + pill(displayStatus(i)) + '</td></tr>').join('');
 
       return '<div class="grid g4" style="margin-bottom:24px">' +
         kpi('wallet', 'Total bulan ini', rp(totalBulan), bulanIni.length + ' item') +
-        kpi('send', 'Menunggu verifikasi', cnt('Submitted'), 'Submitted', '#/verification') +
+        kpi('send', 'Menunggu finalisasi', cnt('Submitted'), 'Submitted', '#/item-list?status=Submitted') +
         kpi('alert', 'Perlu revisi', cnt('Revision'), 'Revision', '#/revision-center') +
-        kpi('check', 'Final', cnt('Final'), 'siap dicetak', '#/reports') + '</div>' +
+        kpi('check', 'Final', items.filter(i => i.status === 'Final' && !i.laporanId).length, 'belum dicetak', '#/item-list?status=Final') + '</div>' +
         '<div class="grid g-main" style="margin-bottom:24px">' +
-        '<div class="card"><div class="card-h"><h3>Pengeluaran 6 bulan terakhir</h3><a class="btn pri sm" href="#/expense-input">' + icon('plusS', 'sm') + ' Input baru</a></div><div class="card-b"><div class="bars">' + bars + '</div></div></div>' +
-        '<div class="card"><div class="card-h"><h3>Per kategori (bulan ini)</h3></div><div class="card-b" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap">' + donut + '<div class="legend" style="flex:1;min-width:150px">' + legend + '</div></div></div></div>' +
+        '<div class="card"><div class="card-h"><h3>Pengeluaran 6 bulan terakhir</h3><span class="muted small">Total per bulan (Rp)</span></div><div class="card-b">' + barChart + '</div></div>' +
+        '<div class="card"><div class="card-h"><h3>Per kategori (bulan ini)</h3></div><div class="card-b" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;justify-content:center">' + donut + '<div class="legend" style="flex:1;min-width:190px">' + legend + '</div></div></div></div>' +
         '<div class="card"><div class="card-h"><h3>Aktivitas terbaru</h3><a class="btn sm" href="#/item-list">Lihat semua</a></div>' +
         (rows ? '<div class="tbl-wrap"><table class="tbl-cards"><tbody>' + rows + '</tbody></table></div>' : emptyState('Belum ada data. Mulai dengan input pengeluaran pertama.')) + '</div>';
     },
@@ -169,7 +177,7 @@ window.Views = window.Views || {};
         '<div class="card"><div class="card-h"><h3>' + (this.editId ? 'Ubah item ' + esc(this.editId) : 'Detail pengeluaran') + '</h3></div><div class="card-b"><div class="row">' +
         '<div class="row r2"><div class="field"><label>Tanggal</label><input class="in" type="date" name="tanggal" value="' + esc(it.tanggal) + '" required></div>' +
         '<div class="field"><label>Kategori</label><select class="in" name="kategori" required><option value="">Pilih kategori…</option>' + opt + '</select></div></div>' +
-        '<div class="field"><label>Deskripsi</label><input class="in" name="deskripsi" maxlength="200" placeholder="mis. Makan siang rapat vendor" value="' + esc(it.deskripsi) + '" required></div>' +
+        '<div class="field"><label>Deskripsi</label><textarea class="in" name="deskripsi" maxlength="400" rows="3" placeholder="mis. Baterai Dell Precision 5550 P91F XPS 15 9500 9510" required>' + esc(it.deskripsi) + '</textarea></div>' +
         '<div class="field"><label>Vendor / Toko</label><input class="in" name="vendor" maxlength="120" value="' + esc(it.vendor) + '"></div>' +
         '<div class="row r3"><div class="field"><label>Qty</label><input class="in tn" name="qty" inputmode="decimal" value="' + esc(it.qty) + '"></div>' +
         '<div class="field"><label>Satuan</label><input class="in" name="satuan" maxlength="20" value="' + esc(it.satuan) + '"></div>' +
@@ -268,14 +276,64 @@ window.Views = window.Views || {};
   // =========================================================
   // DAFTAR ITEM
   // =========================================================
-  const F = { q: '', status: '', kategori: '', bulan: '' };
+  window.displayStatus = i => (i.status === 'Final' && i.laporanId) ? 'Tercetak' : i.status;
+  const lapNomor = id => { const l = Store.s.laporan.find(x => x.id === id); return l ? (l.nomor || l.id) : id; };
+  const F = { q: '', status: '', kategori: '', bulan: '', limit: 50 };
   const SEL = new Set();
+
+  // ---- lightbox foto bukti ----
+  window.openLightbox = function (itemId, start) {
+    const it = Store.item(itemId); if (!it || !(it.foto || []).length) return;
+    let k = Math.max(0, Math.min(start || 0, it.foto.length - 1));
+    const m = openModal({
+      title: it.deskripsi.slice(0, 60) + ' — foto bukti', wide: true, noFocus: true,
+      body: '<div class="lb"><button class="btn lb-nav" data-d="-1" aria-label="Sebelumnya">' + icon('left') + '</button><div class="photo-view" id="lbv"><div class="skel" style="width:50%"></div></div><button class="btn lb-nav" data-d="1" aria-label="Berikutnya">' + icon('right') + '</button></div>' +
+        '<div class="muted small" id="lbc" style="text-align:center;margin-top:10px"></div><div class="thumbs" id="lbt" style="margin-top:10px;justify-content:center"></div>'
+    });
+    const show = i => {
+      k = (i + it.foto.length) % it.foto.length;
+      $('#lbc', m).textContent = (k + 1) + ' / ' + it.foto.length + ' · ' + it.id + ' · ' + rp(it.total);
+      $$('#lbt .thumb', m).forEach((t, x) => t.style.outline = x === k ? '3px solid var(--primary-c)' : 'none');
+      const v = $('#lbv', m); v.innerHTML = '<div class="skel" style="width:50%"></div>';
+      const my = k; Photos.get(it.foto[k].id).then(u => { const vv = $('#lbv', m); if (vv && my === k) vv.innerHTML = '<img src="' + u + '" alt="Foto bukti ' + (k + 1) + '">'; })
+        .catch(e => { const vv = $('#lbv', m); if (vv) vv.innerHTML = '<div style="color:#cbd5e1;padding:20px">' + esc(e.message) + '</div>'; });
+      Photos.prefetch([it.foto[(k + 1) % it.foto.length].id]);
+    };
+    $('#lbt', m).innerHTML = it.foto.map((f, x) => '<div class="thumb" data-i="' + x + '"><span>' + icon('image') + '</span></div>').join('');
+    it.foto.forEach((f, x) => Photos.get(f.id).then(u => { const t = $('#lbt .thumb[data-i="' + x + '"]', m); if (t) t.innerHTML = '<img src="' + u + '" alt="">'; }).catch(() => {}));
+    m.addEventListener('click', e => { const n = e.target.closest('[data-d]'), t = e.target.closest('.thumb[data-i]'); if (n) show(k + (+n.dataset.d)); if (t) show(+t.dataset.i); });
+    const key = e => { if (!$('#modal')) return document.removeEventListener('keydown', key); if (e.key === 'ArrowLeft') show(k - 1); if (e.key === 'ArrowRight') show(k + 1); };
+    document.addEventListener('keydown', key);
+    show(k);
+  };
+
+  // ---- tandai perlu revisi (dipindah dari halaman Verifikasi) ----
+  window.markRevisi = function (id) {
+    const cur = Store.item(id); if (!cur) return;
+    if (cur.status === 'Final') return toast('Item Final terkunci. Minta Administrator CMS membukanya kembali.', 'err');
+    openModal({
+      title: 'Tandai perlu revisi', body: '<div class="muted" style="margin-bottom:10px">' + esc(cur.deskripsi) + ' — ' + rp(cur.total) + '</div><div class="field"><label>Catatan revisi (wajib)</label><textarea class="in" id="rc" maxlength="500" placeholder="mis. Foto nota kurang jelas / nominal tidak sesuai"></textarea></div>',
+      footer: '<button class="btn" data-close>Batal</button><button class="btn dng" id="ok">Kirim ke revisi</button>',
+      onMount: m => { m.querySelector('#ok').onclick = async () => {
+        const catatan = m.querySelector('#rc').value.trim(); if (!catatan) return toast('Catatan wajib diisi.', 'err');
+        closeModal();
+        const prev = Object.assign({}, cur), tmp = { id: 'TMP-' + Date.now(), itemId: cur.id, catatan, status: 'Open', dibuatOleh: Api.user.email, dibuatPada: new Date().toISOString() };
+        cur.status = 'Revision'; Store.s.revisi.unshift(tmp); Store.touch();
+        try { await Api.call('revisi.add', { itemId: cur.id, catatan }); toast('Dikirim ke Pusat Revisi ✓', 'ok'); Sync.run(); }
+        catch (e) { const i = Store.s.items.findIndex(x => x.id === prev.id); if (i >= 0) Store.s.items[i] = prev; Store.s.revisi = Store.s.revisi.filter(r => r !== tmp); Store.touch(); toast(e.message, 'err'); }
+      }; }
+    });
+  };
+
   Views.items = {
     title: 'Daftar Item',
-    render() {
+    setFilter(o) { Object.assign(F, { q: '', status: '', kategori: '', bulan: '', limit: 50 }, o || {}); },
+    render(ctx) {
+      if (ctx && ctx.q && ctx.q.status !== undefined && !ctx._f) { ctx._f = true; this.setFilter({ status: ctx.q.status }); }
       const kats = Store.s.kategori.map(k => '<option>' + esc(k.nama) + '</option>').join('');
+      const stOpt = [['Draft', 'Draft'], ['Submitted', 'Submitted (menunggu finalisasi)'], ['Revision', 'Revision'], ['Final', 'Final (belum dicetak)'], ['Tercetak', 'Final · Tercetak']];
       return '<div class="toolbar"><div class="grow" style="position:relative"><input class="in" id="q" placeholder="Cari deskripsi / vendor / ID…" value="' + esc(F.q) + '" style="padding-left:36px"><span style="position:absolute;left:11px;top:10px;color:var(--text2)">' + icon('search', 'sm') + '</span></div>' +
-        '<select class="in" id="fs"><option value="">Semua status</option>' + ['Draft', 'Submitted', 'Revision', 'Final'].map(s => '<option ' + (F.status === s ? 'selected' : '') + '>' + s + '</option>').join('') + '</select>' +
+        '<select class="in" id="fs"><option value="">Semua status</option>' + stOpt.map(o => '<option value="' + o[0] + '" ' + (F.status === o[0] ? 'selected' : '') + '>' + o[1] + '</option>').join('') + '</select>' +
         '<select class="in" id="fk"><option value="">Semua kategori</option>' + kats + '</select>' +
         '<input class="in" type="month" id="fb" value="' + esc(F.bulan) + '">' +
         '<a class="btn pri" href="#/expense-input">' + icon('plusS', 'sm') + ' Item baru</a></div>' +
@@ -285,75 +343,99 @@ window.Views = window.Views || {};
       const self = this;
       $('#fk', root).value = F.kategori;
       const draw = () => self.draw(root);
-      $('#q', root).oninput = debounce(e => { F.q = e.target.value; draw(); }, 120);
-      $('#fs', root).onchange = e => { F.status = e.target.value; draw(); };
-      $('#fk', root).onchange = e => { F.kategori = e.target.value; draw(); };
-      $('#fb', root).onchange = e => { F.bulan = e.target.value; draw(); };
+      $('#q', root).oninput = debounce(e => { F.q = e.target.value; F.limit = 50; draw(); }, 120);
+      $('#fs', root).onchange = e => { F.status = e.target.value; F.limit = 50; draw(); };
+      $('#fk', root).onchange = e => { F.kategori = e.target.value; F.limit = 50; draw(); };
+      $('#fb', root).onchange = e => { F.bulan = e.target.value; F.limit = 50; draw(); };
       root.addEventListener('click', e => self.click(e, root));
       root.addEventListener('change', e => {
         if (e.target.matches('[data-sel]')) { e.target.checked ? SEL.add(e.target.dataset.sel) : SEL.delete(e.target.dataset.sel); self.drawBulk(root); }
-        if (e.target.matches('#all')) { self.filtered().forEach(i => e.target.checked ? SEL.add(i.id) : SEL.delete(i.id)); draw(); }
+        if (e.target.matches('#all')) { self.filtered().slice(0, F.limit).forEach(i => e.target.checked ? SEL.add(i.id) : SEL.delete(i.id)); draw(); }
       });
       draw();
     },
     onStore(root) { this.draw(root); },
     filtered() {
       const q = F.q.toLowerCase();
-      return Store.s.items.filter(i => (!F.status || i.status === F.status) && (!F.kategori || i.kategori === F.kategori) && (!F.bulan || String(i.tanggal).startsWith(F.bulan)) &&
+      return Store.s.items.filter(i => (!F.status || displayStatus(i) === F.status) && (!F.kategori || i.kategori === F.kategori) && (!F.bulan || String(i.tanggal).startsWith(F.bulan)) &&
         (!q || (i.deskripsi + ' ' + i.vendor + ' ' + i.id).toLowerCase().includes(q)))
         .sort((a, b) => String(b.tanggal).localeCompare(String(a.tanggal)) || String(b.dibuatPada).localeCompare(String(a.dibuatPada)));
     },
     draw(root) {
-      const list = this.filtered();
+      const all = this.filtered(), list = all.slice(0, F.limit);
       [...SEL].forEach(id => { if (!Store.item(id)) SEL.delete(id); });
       const tbl = $('#tbl', root); if (!tbl) return;
-      if (!list.length) { tbl.innerHTML = emptyState(Store.s.items.length ? 'Tidak ada item yang cocok dengan filter.' : 'Belum ada item pengeluaran.'); this.drawBulk(root); return; }
+      if (!all.length) { tbl.innerHTML = emptyState(Store.s.items.length ? 'Tidak ada item yang cocok dengan filter.' : 'Belum ada item pengeluaran.'); this.drawBulk(root); return; }
       const rows = list.map(i => {
-        const locked = i.status === 'Final', tmp = String(i.id).startsWith('TMP-');
+        const ds = displayStatus(i), tmp = String(i.id).startsWith('TMP-'), final = i.status === 'Final', nf = (i.foto || []).length;
+        let aksi;
+        if (tmp) aksi = '<span class="muted small">menyimpan…</span>';
+        else {
+          aksi = '<div class="acts">' +
+            (i.status === 'Submitted' ? '<button class="btn sm teal" data-fin="' + esc(i.id) + '">' + icon('check', 'sm') + ' Finalkan</button>' : '') +
+            '<button class="btn sm ' + (final ? 'locked' : '') + '" data-edit="' + esc(i.id) + '" title="' + (final ? 'Item Final terkunci' : 'Ubah item') + '">' + icon(final ? 'lock' : 'edit', 'sm') + ' Edit</button>' +
+            '<button class="btn sm dng ' + (final ? 'locked' : '') + '" data-del="' + esc(i.id) + '" title="' + (final ? 'Item Final terkunci' : 'Hapus item') + '">' + icon('trash', 'sm') + ' Hapus</button>' +
+            '<button class="btn sm" data-more="' + esc(i.id) + '" aria-label="Menu lainnya">⋯</button></div>';
+        }
         return '<tr style="' + (i._pending ? 'opacity:.6' : '') + '"><td class="nol" style="width:36px"><input class="chk" type="checkbox" data-sel="' + esc(i.id) + '" ' + (SEL.has(i.id) ? 'checked' : '') + '></td>' +
-          '<td data-l="Tanggal">' + fmtTgl(i.tanggal) + '</td>' +
-          '<td data-l="Deskripsi"><div class="bold">' + esc(i.deskripsi) + '</div><div class="muted small">' + esc(i.id) + ' · ' + esc(i.kategori) + (i.vendor ? ' · ' + esc(i.vendor) : '') + '</div></td>' +
-          '<td data-l="Foto" class="r">' + ((i.foto || []).length ? icon('camera', 'sm') + ' ' + i.foto.length : '<span class="muted">–</span>') + '</td>' +
-          '<td data-l="Total" class="r bold">' + rp(i.total) + '</td><td data-l="Status">' + pill(i.status) + (i.laporanId ? '<div class="muted small">' + esc(i.laporanId) + '</div>' : '') + '</td>' +
-          '<td class="nol r" style="white-space:nowrap">' +
-          (tmp ? '<span class="muted small">menyimpan…</span>' : locked ? (isCMS() ? '<button class="btn sm" data-reopen="' + esc(i.id) + '" title="Buka kembali (CMS)">' + icon('unlock', 'sm') + '</button>' : '<span class="muted" title="Final — terkunci">' + icon('lock', 'sm') + '</span>') :
-            '<a class="btn sm" href="#/expense-input?id=' + esc(i.id) + '" aria-label="Ubah">' + icon('edit', 'sm') + '</a> <button class="btn sm dng" data-del="' + esc(i.id) + '" aria-label="Hapus">' + icon('trash', 'sm') + '</button>') + '</td></tr>';
+          '<td data-l="Tanggal" style="white-space:nowrap">' + fmtTgl(i.tanggal) + '</td>' +
+          '<td data-l="Deskripsi" class="desc"><div class="bold">' + esc(i.deskripsi) + '</div><div class="muted small">' + esc(i.id) + ' · ' + esc(i.kategori) + (i.vendor ? ' · ' + esc(i.vendor) : '') + '</div></td>' +
+          '<td data-l="Foto" class="r">' + (nf ? '<button class="btn sm photo-badge" data-photo="' + esc(i.id) + '" title="Lihat foto bukti">' + icon('camera', 'sm') + ' ' + nf + '</button>' : '<span class="muted">–</span>') + '</td>' +
+          '<td data-l="Total" class="r bold">' + rp(i.total) + '</td>' +
+          '<td data-l="Status">' + pill(ds) + (ds === 'Tercetak' ? '<div class="muted small">' + esc(lapNomor(i.laporanId)) + '</div>' : '') + '</td>' +
+          '<td class="nol r">' + aksi + '</td></tr>';
       }).join('');
       const allOn = list.length && list.every(i => SEL.has(i.id));
-      tbl.innerHTML = '<table class="tbl-cards"><thead><tr><th style="width:36px"><input class="chk" id="all" type="checkbox" ' + (allOn ? 'checked' : '') + '></th><th>Tanggal</th><th>Deskripsi</th><th class="r">Foto</th><th class="r">Total</th><th>Status</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>';
+      tbl.innerHTML = '<table class="tbl-cards"><thead><tr><th style="width:36px"><input class="chk" id="all" type="checkbox" ' + (allOn ? 'checked' : '') + '></th><th>Tanggal</th><th>Deskripsi</th><th class="r">Foto</th><th class="r">Total</th><th>Status</th><th class="r">Aksi</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+        '<div class="more-row muted small">Menampilkan ' + list.length + ' dari ' + all.length + ' item' + (all.length > list.length ? ' · <button class="btn sm" data-more-rows>Tampilkan ' + Math.min(50, all.length - list.length) + ' lagi</button>' : '') + '</div>';
       this.drawBulk(root);
     },
     drawBulk(root) {
       const ids = [...SEL], its = ids.map(Store.item).filter(Boolean);
       const b = $('#bulk', root); if (!b) return;
       if (!its.length) { b.innerHTML = ''; return; }
-      const drafts = its.filter(i => i.status === 'Draft' || i.status === 'Revision').length, finals = its.filter(i => i.status === 'Final').length;
+      const n = st => its.filter(i => i.status === st).length;
       const tot = its.reduce((s, i) => s + i.total, 0);
-      b.innerHTML = '<div class="card" style="padding:10px 14px;margin-bottom:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;position:sticky;top:64px;z-index:5"><b>' + its.length + ' dipilih</b><span class="muted tn">' + rp(tot) + '</span><span style="flex:1"></span>' +
-        '<button class="btn sm" data-bulk="submit" ' + (drafts ? '' : 'disabled') + '>' + icon('send', 'sm') + ' Ajukan (' + drafts + ')</button>' +
-        '<button class="btn sm teal" data-bulk="report" ' + (finals ? '' : 'disabled') + '>' + icon('file', 'sm') + ' Buat laporan (' + finals + ')</button>' +
+      b.innerHTML = '<div class="card bulkbar"><b>' + its.length + ' dipilih</b><span class="muted tn">' + rp(tot) + '</span><span style="flex:1"></span>' +
+        '<button class="btn sm" data-bulk="submit" ' + (n('Draft') ? '' : 'disabled') + '>' + icon('send', 'sm') + ' Ajukan (' + n('Draft') + ')</button>' +
+        '<button class="btn sm teal" data-bulk="final" ' + (n('Submitted') ? '' : 'disabled') + '>' + icon('check', 'sm') + ' Finalkan (' + n('Submitted') + ')</button>' +
+        '<button class="btn sm teal" data-bulk="report" ' + (n('Final') ? '' : 'disabled') + '>' + icon('file', 'sm') + ' Buat laporan (' + n('Final') + ')</button>' +
         '<button class="btn sm dng" data-bulk="del">' + icon('trash', 'sm') + ' Hapus</button><button class="btn sm ghost" data-bulk="clear">Batal</button></div>';
     },
+    async finalkan(ids) {
+      const ok = await confirmBox('Finalkan ' + ids.length + ' item? Setelah Final, item terkunci dan hanya Administrator CMS yang dapat membukanya kembali.', 'Finalkan');
+      if (ok) await changeStatus(ids, 'Final', ids.length + ' item difinalkan ✓');
+    },
     async click(e, root) {
-      const del = e.target.closest('[data-del]'), re = e.target.closest('[data-reopen]'), bk = e.target.closest('[data-bulk]');
+      const q = s => e.target.closest(s);
+      const del = q('[data-del]'), ed = q('[data-edit]'), fin = q('[data-fin]'), ph = q('[data-photo]'), more = q('[data-more]'), bk = q('[data-bulk]');
+      if (q('[data-more-rows]')) { F.limit += 50; return this.draw(root); }
+      if (ph) return openLightbox(ph.dataset.photo, 0);
+      if (fin) return this.finalkan([fin.dataset.fin]);
+      if (ed) { const it = Store.item(ed.dataset.edit); if (it && it.status === 'Final') return toast('Item Final terkunci' + (isCMS() ? ' — gunakan menu ⋯ → Buka kembali.' : '. Minta Administrator CMS membukanya kembali.'), 'err'); location.hash = '#/expense-input?id=' + ed.dataset.edit; return; }
       if (del) return this.hapus([del.dataset.del], root);
-      if (re) return this.reopen(re.dataset.reopen);
+      if (more) return this.menu(more, more.dataset.more, root);
       if (!bk) return;
       const ids = [...SEL], its = ids.map(Store.item).filter(Boolean), act = bk.dataset.bulk;
       if (act === 'clear') { SEL.clear(); return this.draw(root); }
       if (act === 'del') return this.hapus(ids, root);
-      if (act === 'submit') {
-        const t = its.filter(i => i.status === 'Draft' || i.status === 'Revision').map(i => i.id);
-        // Revision harus diajukan lewat simpan ulang (menutup catatan revisi); hanya Draft yang bisa massal
-        const drafts = its.filter(i => i.status === 'Draft').map(i => i.id);
-        if (t.length !== drafts.length) toast('Item berstatus Revision diajukan ulang lewat tombol ubah.', '', 4500);
-        if (drafts.length) { SEL.clear(); await changeStatus(drafts, 'Submitted', drafts.length + ' item diajukan ✓'); }
-      }
+      if (act === 'submit') { const d = its.filter(i => i.status === 'Draft').map(i => i.id); if (d.length) { SEL.clear(); await changeStatus(d, 'Submitted', d.length + ' item diajukan ✓'); } }
+      if (act === 'final') { const d = its.filter(i => i.status === 'Submitted').map(i => i.id); if (d.length) { await this.finalkan(d); SEL.clear(); this.draw(root); } }
       if (act === 'report') { Views.reports.pre = its.filter(i => i.status === 'Final').map(i => i.id); SEL.clear(); location.hash = '#/reports'; }
+    },
+    menu(anchor, id) {
+      const it = Store.item(id); if (!it) return;
+      const final = it.status === 'Final', nf = (it.foto || []).length;
+      openMenu(anchor, [
+        { label: 'Lihat foto bukti (' + nf + ')', icon: 'camera', disabled: !nf, run: () => openLightbox(id, 0) },
+        { label: 'Finalkan', icon: 'check', disabled: it.status !== 'Submitted', run: () => this.finalkan([id]) },
+        { label: 'Tandai perlu revisi', icon: 'alert', disabled: final, run: () => markRevisi(id) },
+        { label: 'Buka kembali (CMS)', icon: 'unlock', disabled: !(final && isCMS()), run: () => this.reopen(id) }
+      ]);
     },
     async hapus(ids, root) {
       const its = ids.map(Store.item).filter(Boolean);
-      if (its.some(i => i.status === 'Final')) return toast('Item Final tidak dapat dihapus.', 'err');
+      if (its.some(i => i.status === 'Final')) return toast('Item Final terkunci dan tidak dapat dihapus.', 'err');
       if (!(await confirmBox('Hapus ' + its.length + ' item beserta foto buktinya? Tindakan ini tidak dapat dibatalkan.', 'Hapus', true))) return;
       const backup = its.map(i => Object.assign({}, i));
       ids.forEach(id => { Store.s.items = Store.s.items.filter(i => i.id !== id); SEL.delete(id); }); Store.touch();
@@ -369,73 +451,6 @@ window.Views = window.Views || {};
           btnBusy(ev.target, true);
           try { await Api.call('item.reopen', { id, alasan }); closeModal(); toast('Item dibuka kembali ✓', 'ok'); await Sync.run(true); }
           catch (e) { toast(e.message, 'err'); btnBusy(ev.target, false); }
-        }; }
-      });
-    }
-  };
-
-  // =========================================================
-  // VERIFIKASI
-  // =========================================================
-  Views.verification = {
-    title: 'Verifikasi', curId: null, idx: 0, tab: 'angka',
-    list() { return Store.s.items.filter(i => i.status === 'Submitted' && !String(i.id).startsWith('TMP-')).sort((a, b) => String(a.tanggal).localeCompare(String(b.tanggal))); },
-    render() {
-      const L = this.list();
-      if (!L.length) return '<div class="card">' + emptyState('Tidak ada item yang menunggu verifikasi. 🎉') + '</div>';
-      let i = L.findIndex(x => x.id === this.curId);
-      if (i < 0) i = Math.max(0, Math.min(this.idx, L.length - 1));
-      this.idx = i; this.curId = L[i].id;
-      const it = L[i];
-      const rate = Store.s.pengaturan.PPN_PERSEN || 11;
-      Photos.prefetch((it.foto || []).map(f => f.id)); if (L[i + 1]) Photos.prefetch(L[i + 1].foto.map(f => f.id));
-      const fotos = it.foto || [];
-      return '<div class="toolbar"><button class="btn" data-nav="-1" ' + (i === 0 ? 'disabled' : '') + '>' + icon('left', 'sm') + ' Sebelumnya</button><b class="tn">' + (i + 1) + ' / ' + L.length + '</b>' +
-        '<button class="btn" data-nav="1" ' + (i === L.length - 1 ? 'disabled' : '') + '>Berikutnya ' + icon('right', 'sm') + '</button><span style="flex:1"></span>' +
-        '<button class="btn dng" data-act="rev">' + icon('alert', 'sm') + ' Tandai perlu revisi</button><button class="btn teal" data-act="final" ' + (it._pending ? 'disabled' : '') + '>' + icon('check', 'sm') + ' Finalkan</button></div>' +
-        '<div class="tabs"><button class="' + (this.tab === 'angka' ? 'on' : '') + '" data-tab="angka">Angka</button><button class="' + (this.tab === 'foto' ? 'on' : '') + '" data-tab="foto">Foto (' + fotos.length + ')</button></div>' +
-        '<div class="split tabbed"><div class="' + (this.tab === 'angka' ? 'show' : '') + '"><div class="card"><div class="card-h"><h3>' + esc(it.deskripsi) + '</h3>' + pill(it.status) + '</div><div class="card-b">' +
-        '<dl class="kv"><dt>ID</dt><dd>' + esc(it.id) + '</dd><dt>Tanggal</dt><dd>' + fmtTgl(it.tanggal) + '</dd><dt>Kategori</dt><dd>' + esc(it.kategori) + '</dd><dt>Vendor</dt><dd>' + esc(it.vendor || '-') + '</dd>' +
-        '<dt>Qty × Harga</dt><dd class="tn">' + esc(it.qty) + ' ' + esc(it.satuan) + ' × ' + rp(it.harga) + '</dd><dt>Mode pajak</dt><dd>' + esc(it.modePajak) + ' (' + rate + '%)</dd><dt>Dibuat oleh</dt><dd>' + esc(it.dibuatOleh) + '</dd><dt>Catatan</dt><dd>' + esc(it.catatan || '-') + '</dd></dl>' +
-        '<div class="sum tn" style="margin-top:16px"><div><span>Subtotal</span><b>' + rp(it.subtotal) + '</b></div><div><span>PPN</span><b>' + rp(it.ppn) + '</b></div><div class="tot"><span>Total</span><span>' + rp(it.total) + '</span></div></div></div></div></div>' +
-        '<div class="' + (this.tab === 'foto' ? 'show' : '') + '"><div class="card"><div class="card-h"><h3>Foto bukti</h3><span class="muted small">' + fotos.length + ' berkas</span></div><div class="card-b">' +
-        (fotos.length ? '<div class="photo-view" id="pv"><div class="skel" style="width:60%"></div></div><div class="thumbs" id="pth" style="margin-top:12px">' + fotos.map((f, k) => '<div class="thumb" data-p="' + k + '"><span>' + icon('image') + '</span></div>').join('') + '</div>' : '<div class="empty">' + icon('image', 'lg') + '<div>Tanpa lampiran foto</div></div>') +
-        '</div></div></div></div>';
-    },
-    mount(root) {
-      const self = this;
-      const it = Store.item(this.curId);
-      const show = k => { const f = it && it.foto[k]; if (!f) return; Photos.get(f.id).then(u => { const pv = $('#pv', root); if (pv) pv.innerHTML = '<img src="' + u + '" alt="Foto bukti">'; }).catch(e => { const pv = $('#pv', root); if (pv) pv.innerHTML = '<div class="muted" style="color:#cbd5e1">' + esc(e.message) + '</div>'; }); };
-      if (it && it.foto.length) { show(0); it.foto.forEach((f, k) => Photos.get(f.id).then(u => { const t = $('.thumb[data-p="' + k + '"]', root); if (t) t.innerHTML = '<img src="' + u + '" alt="">'; }).catch(() => {})); }
-      if (root._bound) return; root._bound = true;
-      root.addEventListener('click', async e => {
-        const n = e.target.closest('[data-nav]'), a = e.target.closest('[data-act]'), t = e.target.closest('[data-tab]'), p = e.target.closest('[data-p]');
-        const L = self.list();
-        if (p) { const cur = Store.item(self.curId); const f = cur && cur.foto[+p.dataset.p]; if (f) Photos.get(f.id).then(u => { const pv = $('#pv', root); if (pv) pv.innerHTML = '<img src="' + u + '" alt="">'; }); }
-        if (t) { self.tab = t.dataset.tab; App.rerender(); }
-        if (n) { const i = Math.max(0, Math.min(L.length - 1, self.idx + (+n.dataset.nav))); self.idx = i; self.curId = L[i].id; self.tab = 'angka'; App.rerender(); }
-        if (a && a.dataset.act === 'final') {
-          const cur = Store.item(self.curId); if (!cur) return;
-          self.idx = L.findIndex(x => x.id === cur.id); self.curId = null;
-          changeStatus([cur.id], 'Final', 'Item difinalkan ✓');
-        }
-        if (a && a.dataset.act === 'rev') self.revisi();
-      });
-    },
-    revisi() {
-      const cur = Store.item(this.curId); if (!cur) return;
-      const self = this;
-      openModal({
-        title: 'Tandai perlu revisi', body: '<div class="muted" style="margin-bottom:10px">' + esc(cur.deskripsi) + ' — ' + rp(cur.total) + '</div><div class="field"><label>Catatan revisi (wajib)</label><textarea class="in" id="rc" maxlength="500" placeholder="mis. Foto nota kurang jelas / nominal tidak sesuai"></textarea></div>',
-        footer: '<button class="btn" data-close>Batal</button><button class="btn dng" id="ok">Kirim ke revisi</button>',
-        onMount: m => { m.querySelector('#ok').onclick = async () => {
-          const catatan = m.querySelector('#rc').value.trim(); if (!catatan) return toast('Catatan wajib diisi.', 'err');
-          closeModal();
-          const prev = Object.assign({}, cur), tmp = { id: 'TMP-' + Date.now(), itemId: cur.id, catatan, status: 'Open', dibuatOleh: Api.user.email, dibuatPada: new Date().toISOString() };
-          self.idx = self.list().findIndex(x => x.id === cur.id); self.curId = null;
-          cur.status = 'Revision'; Store.s.revisi.unshift(tmp); Store.touch();
-          try { await Api.call('revisi.add', { itemId: cur.id, catatan }); toast('Dikirim ke Pusat Revisi ✓', 'ok'); Sync.run(); }
-          catch (e) { const i = Store.s.items.findIndex(x => x.id === prev.id); if (i >= 0) Store.s.items[i] = prev; Store.s.revisi = Store.s.revisi.filter(r => r !== tmp); Store.touch(); toast(e.message, 'err'); }
         }; }
       });
     }

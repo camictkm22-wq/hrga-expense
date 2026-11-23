@@ -28,6 +28,7 @@
     unlock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>',
     plusS: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
     phone: '<rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>',
+    bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
     key: '<path d="M21 2l-2 2m-7.6 7.6a5.5 5.5 0 1 1-7.8 7.8 5.5 5.5 0 0 1 7.8-7.8zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>'
   };
   window.icon = (n, cls) => '<svg class="i ' + (cls || '') + '" viewBox="0 0 24 24" aria-hidden="true">' + (ICONS[n] || '') + '</svg>';
@@ -39,6 +40,7 @@
   const BLN = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
   window.BLN = BLN;
   window.fmtTgl = iso => { const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? (+m[3]) + ' ' + BLN[+m[2] - 1] + ' ' + m[1] : (iso || '-'); };
+  window.fmtTglEn = iso => { const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/); const E = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return m ? (+m[3]) + '-' + E[+m[2] - 1] + '-' + m[1].slice(2) : (iso || ''); };
   window.fmtWaktu = iso => { const d = new Date(iso); return isNaN(d) ? (iso || '') : d.toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); };
   window.today = () => { const d = new Date(); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); };
   window.pill = s => '<span class="pill ' + esc(s) + '">' + esc(s) + '</span>';
@@ -117,4 +119,21 @@
     if (on) { btn.dataset.l = btn.innerHTML; btn.disabled = true; btn.innerHTML = label || 'Memproses…'; }
     else { btn.disabled = false; if (btn.dataset.l) btn.innerHTML = btn.dataset.l; }
   };
+
+  // Menu popover kecil (aksi tambahan per baris)
+  window.openMenu = function (anchor, items) {
+    closeMenu();
+    const m = document.createElement('div'); m.className = 'popmenu'; m.id = 'popmenu';
+    m.innerHTML = items.map((it, i) => '<button class="pm-i" data-i="' + i + '" ' + (it.disabled ? 'disabled' : '') + '>' + (it.icon ? icon(it.icon, 'sm') : '') + '<span>' + esc(it.label) + '</span></button>').join('');
+    document.body.appendChild(m);
+    const r = anchor.getBoundingClientRect(), w = m.offsetWidth, h = m.offsetHeight;
+    m.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.right - w)) + 'px';
+    m.style.top = (r.bottom + h + 12 > window.innerHeight ? Math.max(8, r.top - h - 4) : r.bottom + 4) + 'px';
+    m.addEventListener('click', e => { const b = e.target.closest('.pm-i'); if (!b || b.disabled) return; closeMenu(); items[+b.dataset.i].run(); });
+    setTimeout(() => { document.addEventListener('mousedown', outside, true); document.addEventListener('keydown', esc2); window.addEventListener('scroll', closeMenu, true); }, 0);
+    function outside(e) { if (!m.contains(e.target)) closeMenu(); }
+    function esc2(e) { if (e.key === 'Escape') closeMenu(); }
+    m._off = () => { document.removeEventListener('mousedown', outside, true); document.removeEventListener('keydown', esc2); window.removeEventListener('scroll', closeMenu, true); };
+  };
+  window.closeMenu = function () { const m = document.getElementById('popmenu'); if (m) { if (m._off) m._off(); m.remove(); } };
 })();

@@ -4,16 +4,15 @@
     'dashboard': { v: 'dashboard', t: 'Dashboard', i: 'dashboard' },
     'expense-input': { v: 'input', t: 'Input Pengeluaran', i: 'plus' },
     'item-list': { v: 'items', t: 'Daftar Item', i: 'list' },
-    'verification': { v: 'verification', t: 'Verifikasi', i: 'check' },
     'revision-center': { v: 'revisions', t: 'Pusat Revisi', i: 'revisi' },
     'reports': { v: 'reports', t: 'Laporan', i: 'file' },
     'report-templates': { v: 'templates', t: 'Template Laporan', i: 'template', cms: true },
     'categories-and-settings': { v: 'settings', t: 'Kategori & Pengaturan', i: 'settings', cms: true },
     'users-and-audit-log': { v: 'users', t: 'Pengguna & Audit', i: 'users', cms: true }
   };
-  const MAIN_NAV = ['dashboard', 'expense-input', 'item-list', 'verification', 'revision-center', 'reports'];
+  const MAIN_NAV = ['dashboard', 'expense-input', 'item-list', 'revision-center', 'reports'];
   const CMS_NAV = ['report-templates', 'categories-and-settings', 'users-and-audit-log'];
-  const BOTTOM = [['dashboard', 'Home', 'home'], ['expense-input', 'Input', 'plus'], ['item-list', 'Item', 'list'], ['verification', 'Verifikasi', 'check'], ['reports', 'Laporan', 'file']];
+  const BOTTOM = [['dashboard', 'Home', 'home'], ['expense-input', 'Input', 'plus'], ['item-list', 'Item', 'list'], ['revision-center', 'Revisi', 'revisi'], ['reports', 'Laporan', 'file']];
 
   const App = window.App = {
     key: null, view: null, root: null, loginMsg: '', failed: null, installEvt: null, raf: 0,
@@ -66,7 +65,10 @@
         '<nav class="nav"><div class="grp">Menu</div>' + MAIN_NAV.map(link).join('') + (cms ? '<div class="grp">CMS</div>' + CMS_NAV.map(link).join('') : '') + '</nav>' +
         '<div class="side-foot"><div class="who">' + esc(u.nama) + '</div><div style="color:#94a3b8">' + esc(u.peran) + '</div><button class="btn sm hidden" id="install">' + icon('download', 'sm') + ' Pasang aplikasi</button><button class="btn sm" id="out">' + icon('logout', 'sm') + ' Keluar</button></div></aside>' +
         '<div class="scrim" id="scrim"></div>' +
-        '<div class="main"><header class="topbar"><button class="btn ghost menu-btn" id="menu" aria-label="Menu">' + icon('menu') + '</button><h1 id="ttl"></h1><span id="syn" class="sync-dot" title="Status sinkronisasi"></span></header>' +
+        '<div class="main"><header class="topbar"><button class="btn ghost menu-btn" id="menu" aria-label="Menu">' + icon('menu') + '</button><h1 id="ttl"></h1><div class="tb-right"><span class="chip" id="period" title="Periode aktif">' + icon('home', 'sm') + ' <span></span></span>' +
+        '<a class="btn pri sm" id="qa" href="#/expense-input" title="Input pengeluaran baru">' + icon('plusS', 'sm') + '<span class="qa-t">Input Pengeluaran</span></a>' +
+        '<button class="btn bell" id="bell" aria-label="Notifikasi">' + icon('bell') + '<span class="nb hidden" id="nb"></span></button>' +
+        '<span class="sync-lbl" id="synl"></span><span id="syn" class="sync-dot" title="Status sinkronisasi"></span></div></header>' +
         '<main class="content" id="content"></main></div>' +
         '<nav class="bottom-nav">' + BOTTOM.map(b => '<a data-nav="' + b[0] + '" href="#/' + b[0] + '">' + icon(b[2]) + '<span>' + b[1] + '</span><span class="badge hidden" data-b="' + b[0] + '"></span></a>').join('') + '</nav>';
       $('#out').onclick = () => App.logout();
@@ -74,7 +76,19 @@
       $('#scrim').onclick = () => document.body.classList.remove('drawer');
       $('#install').onclick = async () => { if (App.installEvt) { App.installEvt.prompt(); await App.installEvt.userChoice; App.installEvt = null; $('#install').classList.add('hidden'); } };
       if (App.installEvt) $('#install').classList.remove('hidden');
+      { const n = new Date(); $('#period span').textContent = BLN[n.getMonth()] + ' ' + n.getFullYear(); }
+      $('#bell').onclick = () => {
+        const S = Store.s, sub = S.items.filter(i => i.status === 'Submitted').length, rev = S.revisi.filter(r => r.status === 'Open').length, fin = S.items.filter(i => i.status === 'Final' && !i.laporanId).length;
+        const go = h => () => { location.hash = h; };
+        const list = [];
+        if (sub) list.push({ label: sub + ' item menunggu difinalkan', icon: 'check', run: go('#/item-list?status=Submitted') });
+        if (rev) list.push({ label: rev + ' catatan revisi perlu tindakan', icon: 'alert', run: go('#/revision-center') });
+        if (fin) list.push({ label: fin + ' item Final belum dicetak', icon: 'file', run: go('#/reports') });
+        if (!list.length) list.push({ label: 'Tidak ada notifikasi baru', icon: 'check', disabled: true, run: () => {} });
+        openMenu($('#bell'), list);
+      };
       Sync.listeners.clear();
+      Sync.listeners.add(s => { const l = $('#synl'); if (l) l.textContent = { busy: 'Menyinkronkan…', ok: '', off: 'Offline', err: 'Gagal sinkron' }[s] || ''; });
       Sync.listeners.add(s => { const d = $('#syn'); if (d) { d.className = 'sync-dot' + (s === 'busy' ? ' busy' : (s === 'off' || s === 'err' ? ' off' : '')); d.title = { busy: 'Menyinkronkan…', ok: 'Tersinkron', off: 'Offline — memakai data tersimpan', err: 'Gagal sinkron' }[s] || ''; } });
       const logo = LS.get('hrga.logo'); if (logo) App.setLogo(logo);
       App.updateNav();
@@ -88,10 +102,11 @@
     updateNav() {
       const S = Store.s;
       const cnt = {
-        'verification': S.items.filter(i => i.status === 'Submitted').length,
+        'item-list': S.items.filter(i => i.status === 'Submitted').length,
         'revision-center': S.revisi.filter(r => r.status === 'Open').length
       };
-      $$('[data-b]').forEach(b => { const n = cnt[b.dataset.b] || 0; b.textContent = n; b.classList.toggle('hidden', !n); if (b.dataset.b === 'verification') b.classList.add('amber'); });
+      { const nb = $('#nb'); if (nb) { const n = cnt['item-list'] + cnt['revision-center']; nb.textContent = n > 99 ? '99+' : n; nb.classList.toggle('hidden', !n); } }
+      $$('[data-b]').forEach(b => { const n = cnt[b.dataset.b] || 0; b.textContent = n; b.classList.toggle('hidden', !n); if (b.dataset.b === 'item-list') b.classList.add('amber'); });
     },
 
     parse() {
@@ -109,6 +124,7 @@
       App.key = ctx.name; App.ctx = ctx; App.view = Views[r.v];
       $('#ttl').textContent = r.t; document.title = r.t + ' · ' + APP_CONFIG.APP_NAME;
       $$('[data-nav]').forEach(a => a.classList.toggle('on', a.dataset.nav === ctx.name));
+      { const qa = $('#qa'); if (qa) qa.classList.toggle('hidden', ctx.name === 'expense-input'); }
       App.draw(true);
     },
 
