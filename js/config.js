@@ -5,7 +5,7 @@
  */
 window.APP_CONFIG = {
   // Tempel URL Web App Google Apps Script (berakhiran /exec)
-  GAS_URL: 'https://script.google.com/macros/s/GANTI_DENGAN_ID_DEPLOYMENT/exec',
+  GAS_URL: 'https://script.google.com/macros/s/AKfycbw_uAMqJdKZT449TmAmQnP4kqD4A6IYOZnnA0kf2Z4D1GNg_5Gd7XEF21xKjB-Sg4dm/exec',
   // Opsional: Google OAuth Client ID (publik). Jika kosong, diambil dari server (Script Properties).
   GOOGLE_CLIENT_ID: '',
   APP_NAME: 'HRGA Smart Expense'
