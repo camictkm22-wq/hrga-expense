@@ -1,5 +1,5 @@
-/* Service worker: cache-first untuk cangkang aplikasi, jaringan langsung untuk API GAS. */
-const VERSION = 'hrga-v1.3.0';
+/* Service worker: jaringan-dulu untuk cangkang aplikasi, jaringan langsung untuk API GAS. */
+const VERSION = 'hrga-v1.3.1';
 const SHELL = [
   './', 'index.html', 'manifest.json', 'css/style.css',
   'js/config.js', 'js/api.js', 'js/ui.js', 'js/views-main.js', 'js/views-more.js', 'js/app.js',
@@ -14,10 +14,16 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const req = e.request, url = new URL(req.url);
   if (req.method !== 'GET' || url.origin !== location.origin) return; // API GAS & Google: tidak di-cache
-  // stale-while-revalidate untuk berkas statis: tampil instan, diperbarui di belakang layar
+  // jaringan dulu (selalu versi terbaru; murah karena 304), cadangan dari cache saat offline
   e.respondWith(caches.open(VERSION).then(async c => {
-    const hit = await c.match(req, { ignoreSearch: true });
-    const net = fetch(req).then(r => { if (r && r.ok) c.put(req, r.clone()); return r; }).catch(() => hit);
-    return hit || net;
+    try {
+      const r = await fetch(req, { cache: 'no-cache' });
+      if (r && r.ok) c.put(req, r.clone());
+      return r;
+    } catch (err) {
+      const hit = await c.match(req, { ignoreSearch: true });
+      if (hit) return hit;
+      throw err;
+    }
   }));
 });

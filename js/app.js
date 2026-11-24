@@ -22,7 +22,12 @@
       window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); App.installEvt = e; const b = $('#install'); if (b) b.classList.remove('hidden'); });
       window.addEventListener('hrga:fatal', e => { const c = $('#content'); if (c) c.insertAdjacentHTML('afterbegin', '<div class="banner">' + icon('alert') + '<div><b>Server belum siap.</b> ' + esc(e.detail) + '</div></div>'); });
       window.addEventListener('hashchange', () => App.renderRoute());
-      if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+      if ('serviceWorker' in navigator) {
+        const had = !!navigator.serviceWorker.controller;
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+        // versi baru aktif → muat ulang sekali agar tampilan/skrip selalu sinkron
+        navigator.serviceWorker.addEventListener('controllerchange', () => { if (had && !window.__rl) { window.__rl = 1; location.reload(); } });
+      }
       if (!Api.token || !Api.user) return App.showLogin();
       App.startSession();
     },
