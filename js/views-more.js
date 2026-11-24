@@ -128,7 +128,7 @@
         const h = Store.s.laporan.slice().sort((a, b) => String(b.dibuatPada).localeCompare(String(a.dibuatPada)));
         $('#hist', root).innerHTML = h.length ? '<table class="tbl-cards"><thead><tr><th>Nomor</th><th>Jenis</th><th>Periode</th><th class="r">Item</th><th class="r">Total</th><th>Dibuat</th><th></th></tr></thead><tbody>' +
           h.map(l => '<tr><td data-l="Nomor"><span class="bold">' + esc(l.nomor || l.id) + '</span>' + (l.nomor ? '<div class="muted small">' + esc(l.id) + '</div>' : '') + '</td><td data-l="Jenis">' + (l.jenis === 'PR' ? 'Purchase Request' : 'SBA / Reimb') + '</td><td data-l="Periode">' + esc(l.periode) + '</td><td data-l="Item" class="r">' + esc(l.jumlahItem) + '</td><td data-l="Total" class="r">' + rp(l.total) + '</td><td data-l="Dibuat">' + fmtWaktu(l.dibuatPada) + '<div class="muted small">' + esc(l.dibuatOleh) + '</div></td>' +
-            '<td class="nol r" style="white-space:nowrap"><button class="btn sm" data-dl="pdf:' + esc(l.id) + '">' + icon('download', 'sm') + ' PDF</button> <button class="btn sm" data-dl="xlsx:' + esc(l.id) + '">' + icon('download', 'sm') + ' Excel</button></td></tr>').join('') + '</tbody></table>' : emptyState('Belum ada laporan yang dibuat.');
+            '<td class="nol r" style="white-space:nowrap"><button class="btn sm" data-ed="' + esc(l.id) + '">' + icon('edit', 'sm') + ' Edit</button> <button class="btn sm" data-dl="pdf:' + esc(l.id) + '">' + icon('download', 'sm') + ' PDF</button> <button class="btn sm" data-dl="xlsx:' + esc(l.id) + '">' + icon('download', 'sm') + ' Excel</button></td></tr>').join('') + '</tbody></table>' : emptyState('Belum ada laporan yang dibuat.');
       };
       drawList(); drawPrev(); drawHist();
       root.addEventListener('change', e => {
@@ -153,7 +153,55 @@
           catch (err) { toast(err.message, 'err'); } finally { btnBusy(dl, false); }
           return;
         }
+        const ed = e.target.closest('[data-ed]');
+        if (ed) { self.edit(ed.dataset.ed, drawHist); return; }
         if (e.target.closest('#gen')) self.generate(root, drawList, drawPrev, drawHist);
+      });
+    },
+    // ---- Edit laporan di Riwayat (buat ulang PDF/Excel dengan nomor yang sama) ----
+    edit(id, drawHist) {
+      const lap = Store.s.laporan.find(x => x.id === id); if (!lap) return;
+      const pr = lap.jenis === 'PR';
+      let saved = {}; try { saved = JSON.parse(lap.meta || '{}'); } catch (e) { saved = {}; }
+      const f = Object.assign({}, dflt(lap.jenis), saved.meta || {});
+      const ov = JSON.parse(JSON.stringify(saved.ov || {}));
+      const E = { nomor: lap.nomor || '', ppn: lap.tambahPpn === true || lap.tambahPpn === 'TRUE' || lap.tambahPpn === 'true', busy: false };
+      const ids = String(lap.itemIds || '').split(',').filter(Boolean);
+      const its = ids.map(i => Store.item(i)).filter(Boolean);
+      const hilang = ids.length - its.length, bukanFinal = its.filter(i => i.status !== 'Final').length;
+      const inp = (k, l, t) => '<div class="field"><label>' + l + '</label><input class="in" data-ef="' + k + '" type="' + (t === 'date' ? 'date' : 'text') + '" ' + (t === 'num' ? 'inputmode="numeric" placeholder="0"' : '') + ' value="' + esc(f[k] || '') + '" maxlength="200"></div>';
+      const fields = pr
+        ? '<div class="row r2">' + PR_HEAD.map(x => inp(x[0], x[1], x[2])).join('') + '</div><div class="muted small" style="margin-top:4px">Penandatangan</div><div class="row r2">' + PR_SIGN.map(x => inp(x[0] + '_nama', x[1] + ' — nama') + inp(x[0] + '_jabatan', x[1] + ' — jabatan')).join('') + '</div>'
+        : '<div class="row r2">' + SBA_F.map(x => inp(x[0], x[1], x[2])).join('') + '</div>';
+      const oi = (it, k, d, w) => '<input class="in sm" data-eo="' + esc(it.id) + '|' + k + '" value="' + esc(ov[it.id] && ov[it.id][k] !== undefined ? ov[it.id][k] : d) + '" maxlength="200" style="min-width:' + w + 'px">';
+      const rows = its.map((it, n) => '<tr><td>' + (n + 1) + '</td><td class="desc">' + esc(it.deskripsi) + '</td>' + (pr ? '<td>' + oi(it, 'pn', '-', 70) + '</td><td>' + oi(it, 'io', '-', 90) + '</td>' : '') + '<td>' + oi(it, 'remarks', it.catatan || '', 160) + '</td></tr>').join('');
+      const warn = (hilang || bukanFinal) ? '<div class="muted small" style="color:var(--rev);margin-bottom:8px">Perhatian: ' + (hilang ? hilang + ' item sudah dihapus. ' : '') + (bukanFinal ? bukanFinal + ' item tidak lagi berstatus Final. ' : '') + 'Laporan tidak dapat dibuat ulang sebelum item dikembalikan ke Final.</div>' : '';
+      openModal({
+        wide: true, title: 'Edit laporan ' + (lap.nomor || lap.id),
+        body: warn + '<div class="row"><div class="field"><label>' + (pr ? 'No. PR' : 'No. REIMBURSE / RBA') + '</label><input class="in" data-en maxlength="80" value="' + esc(E.nomor) + '"></div>' + fields +
+          '<label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer"><input type="checkbox" class="chk" data-ep style="margin-top:3px" ' + (E.ppn ? 'checked' : '') + '><span><b>Tambah PPN ' + (Store.s.pengaturan.PPN_PERSEN || 11) + '%</b><br><span class="muted small">Hanya untuk item Non-PPN.</span></span></label></div>' +
+          '<div class="muted small" style="margin:10px 0 4px">Isian per baris (' + its.length + ' item — daftar item tidak dapat diubah; buat laporan baru untuk mengganti item)</div><div class="tbl-wrap" style="max-height:260px"><table><thead><tr><th>No</th><th>Deskripsi</th>' + (pr ? '<th>P/N</th><th>Internal Order</th>' : '') + '<th>Remarks</th></tr></thead><tbody>' + rows + '</tbody></table></div>',
+        footer: '<button class="btn" data-close>Batal</button><button class="btn teal" id="ed-ok"' + ((hilang || bukanFinal) ? ' disabled' : '') + '>' + icon('check', 'sm') + ' Simpan &amp; buat ulang</button>',
+        noFocus: true,
+        onMount: m => {
+          m.addEventListener('input', e => {
+            const t = e.target;
+            if (t.dataset.ef) f[t.dataset.ef] = t.value;
+            if (t.hasAttribute('data-en')) E.nomor = t.value;
+            if (t.dataset.eo) { const [i, k] = t.dataset.eo.split('|'); (ov[i] = ov[i] || {})[k] = t.value; }
+          });
+          m.addEventListener('change', e => { if (e.target.hasAttribute('data-ep')) E.ppn = e.target.checked; });
+          const ok = m.querySelector('#ed-ok');
+          ok.onclick = async () => {
+            if (E.busy) return; E.busy = true; btnBusy(ok, true, 'Membuat ulang… (10–40 dtk)');
+            try {
+              const r = await Api.call('laporan.update', { id: lap.id, nomor: E.nomor.trim(), tambahPpn: E.ppn, meta: f, ov }, { timeout: 200000 });
+              const i = Store.s.laporan.findIndex(x => x.id === lap.id); if (i >= 0) Store.s.laporan[i] = r;
+              Store.touch(); Sync.run(); closeModal(); drawHist();
+              toast('Laporan ' + (r.nomor || r.id) + ' diperbarui ✓', 'ok');
+            } catch (err) { toast(err.message, 'err', 8000); E.busy = false; btnBusy(ok, false); }
+          };
+        }
       });
     },
     async generate(root, drawList, drawPrev, drawHist) {
