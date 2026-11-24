@@ -98,57 +98,95 @@ window.Views = window.Views || {};
   // =========================================================
   // DASHBOARD
   // =========================================================
+  const BLN_FULL = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  const CAT_COLORS = ['#153464', '#4fa66f', '#f5a524', '#8b5cf6', '#0ea5b7', '#e5484d', '#64748b', '#be185d'];
+  const D = { range: '6', catMonth: '' };
+  const ymKey = d => d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+  const nameOf = email => {
+    const u = (Store.s.pengguna || []).find(x => String(x.email).toLowerCase() === String(email || '').toLowerCase());
+    if (u && u.nama) return u.nama;
+    return String(email || '-').split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  };
+  const pct1 = n => n.toFixed(1).replace('.', ',') + '%';
+  const STATUS_ID = { Submitted: 'Menunggu', Revision: 'Revisi', Draft: 'Draft', Final: 'Final', Tercetak: 'Tercetak' };
+
   Views.dashboard = {
     title: 'Dashboard',
     render() {
       const items = Store.s.items;
-      const now = new Date(); const ym = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2);
+      const now = new Date(), ym = ymKey(now);
+      if (!D.catMonth) D.catMonth = ym;
       const bulanIni = items.filter(i => String(i.tanggal).startsWith(ym));
       const totalBulan = bulanIni.reduce((s, i) => s + i.total, 0);
       const cnt = st => items.filter(i => i.status === st).length;
 
-      // 6 bulan terakhir
+      // ---- Tren ----
+      const n = D.range === '12' ? 12 : D.range === 'ytd' ? now.getMonth() + 1 : 6;
       const months = [];
-      for (let k = 5; k >= 0; k--) { const d = new Date(now.getFullYear(), now.getMonth() - k, 1); months.push({ key: d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2), label: BLN[d.getMonth()], v: 0 }); }
+      for (let k = n - 1; k >= 0; k--) { const d = new Date(now.getFullYear(), now.getMonth() - k, 1); months.push({ key: ymKey(d), label: BLN[d.getMonth()], v: 0 }); }
       items.forEach(i => { const m = months.find(x => String(i.tanggal).startsWith(x.key)); if (m) m.v += i.total; });
       const max = Math.max(...months.map(m => m.v), 1);
       const niceMax = v => { const mag = Math.pow(10, Math.floor(Math.log10(v))); for (const c of [1, 2, 2.5, 5, 10]) if (c * mag >= v) return c * mag; return 10 * mag; };
       const top = niceMax(max);
-      const compact = n => n >= 1e9 ? (n / 1e9).toFixed(1).replace('.0', '') + ' M' : n >= 1e6 ? (n / 1e6).toFixed(1).replace('.0', '') + ' jt' : n >= 1e3 ? Math.round(n / 1e3) + ' rb' : String(Math.round(n));
+      const compact = v => v >= 1e9 ? (v / 1e9).toFixed(1).replace('.0', '') + ' M' : v >= 1e6 ? (v / 1e6).toFixed(1).replace('.0', '') + ' jt' : v >= 1e3 ? Math.round(v / 1e3) + ' rb' : String(Math.round(v));
       const ticks = [0, 1, 2, 3, 4].map(k => ({ p: k * 25, v: top * k / 4 }));
       const yAxis = ticks.map(t => '<span style="bottom:' + t.p + '%">' + (t.v ? compact(t.v) : '0') + '</span>').join('');
       const grid = ticks.map(t => '<i class="gl" style="bottom:' + t.p + '%"></i>').join('');
-      const cols = months.map(m => { const h = m.v ? Math.max(1.5, m.v / top * 100) : 0; return '<div class="ch-col" title="' + m.label + ': ' + rp(m.v) + '">' + (m.v ? '<span class="ch-v" style="bottom:calc(' + h + '% + 4px)">' + compact(m.v) + '</span>' : '') + '<b class="ch-bar" style="height:' + h + '%"></b></div>'; }).join('');
+      const cols = months.map((m, idx) => {
+        const h = m.v ? Math.max(1.5, m.v / top * 100) : 0, cur = idx === months.length - 1;
+        const lbl = m.v ? (n > 6 ? 'Rp ' + compact(m.v) : rp(m.v)) : 'Rp 0';
+        return '<div class="ch-col' + (cur ? ' cur' : '') + '" title="' + m.label + ': ' + rp(m.v) + '"><span class="ch-v' + (m.v ? '' : ' z') + '" style="bottom:calc(' + h + '% + 4px)">' + lbl + '</span><b class="ch-bar" style="height:' + h + '%"></b></div>';
+      }).join('');
       const xAxis = months.map(m => '<span>' + m.label + '</span>').join('');
       const barChart = '<div class="chart"><div class="ch-y">' + yAxis + '</div><div class="ch-plot">' + grid + '<div class="ch-bars">' + cols + '</div></div><div></div><div class="ch-x">' + xAxis + '</div></div>';
+      const seg = '<div class="seg sm" id="dr">' + [['6', '6 Bulan'], ['12', '12 Bulan'], ['ytd', 'YTD']].map(x => '<button data-r="' + x[0] + '" class="' + (D.range === x[0] ? 'on' : '') + '">' + x[1] + '</button>').join('') + '</div>';
 
-      // per kategori (bulan ini)
+      // ---- Per kategori (bulan terpilih) ----
+      const sel = items.filter(i => String(i.tanggal).startsWith(D.catMonth));
+      const totalSel = sel.reduce((s, i) => s + i.total, 0);
       const byCat = {};
-      bulanIni.forEach(i => { byCat[i.kategori] = (byCat[i.kategori] || 0) + i.total; });
+      sel.forEach(i => { byCat[i.kategori] = (byCat[i.kategori] || 0) + i.total; });
       const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
-      let acc = 0; const stops = [];
-      cats.forEach(([k, v], idx) => { const pc = v / (totalBulan || 1) * 100; stops.push(COLORS[idx % COLORS.length] + ' ' + acc + '% ' + (acc + pc) + '%'); acc += pc; });
-      const donut = cats.length ? '<div class="donut" style="background:conic-gradient(' + stops.join(',') + ')"><div class="dn-c"><small>Total</small><b>' + compact(totalBulan) + '</b></div></div>' : '';
-      const legend = cats.length ? cats.slice(0, 8).map(([k, v], idx) => '<div><i style="background:' + COLORS[idx % COLORS.length] + '"></i><span>' + esc(k) + '</span><em>' + (v / (totalBulan || 1) * 100).toFixed(1) + '%</em><b>' + rp(v) + '</b></div>').join('') : '<div class="muted">Belum ada pengeluaran bulan ini.</div>';
+      const kOrder = (Store.s.kategori || []).map(k => k.nama);
+      const colorOf = nm => { const x = kOrder.indexOf(nm); return CAT_COLORS[(x < 0 ? Math.abs(String(nm).length) : x) % CAT_COLORS.length]; };
+      const mOpts = []; for (let k = 0; k < 12; k++) { const d = new Date(now.getFullYear(), now.getMonth() - k, 1); mOpts.push('<option value="' + ymKey(d) + '" ' + (ymKey(d) === D.catMonth ? 'selected' : '') + '>' + BLN_FULL[d.getMonth()] + ' ' + d.getFullYear() + '</option>'); }
+      const catRows = cats.length ? cats.slice(0, 8).map(([k, v]) => {
+        const p = v / (totalSel || 1) * 100, c = colorOf(k);
+        return '<div class="cr"><span class="cn"><i style="background:' + c + '"></i>' + esc(k) + '</span><span class="cb"><u style="width:' + Math.max(p, 1.5) + '%;background:' + c + '"></u></span><span class="cp">' + pct1(p) + '</span><span class="cv">' + rp(v) + '</span></div>';
+      }).join('') : '<div class="muted" style="padding:18px 0;text-align:center">Belum ada pengeluaran pada bulan ini.</div>';
 
-      const recent = items.slice().sort((a, b) => String(b.dibuatPada).localeCompare(String(a.dibuatPada))).slice(0, 6);
-      const rows = recent.map(i => '<tr data-go="#/item-list"><td>' + esc(i.deskripsi) + '<div class="muted small">' + fmtTgl(i.tanggal) + ' · ' + esc(i.kategori) + '</div></td><td class="r">' + rp(i.total) + '</td><td>' + pill(displayStatus(i)) + '</td></tr>').join('');
+      // ---- Terbaru ----
+      const recent = items.slice().sort((a, b) => String(b.tanggal).localeCompare(String(a.tanggal)) || String(b.dibuatPada).localeCompare(String(a.dibuatPada))).slice(0, 5);
+      const rows = recent.map(i => {
+        const c = colorOf(i.kategori), ds = displayStatus(i);
+        return '<tr data-go="#/item-list"><td data-l="Tanggal" class="nw">' + fmtTgl(i.tanggal) + '</td><td data-l="No. Pengajuan" class="nw tn">' + esc(i.id) + '</td><td data-l="Keterangan" class="desc">' + esc(i.deskripsi) + '</td>' +
+          '<td data-l="Kategori"><span class="chipc" style="--c:' + c + '">' + esc(i.kategori) + '</span></td><td data-l="Pemohon">' + esc(nameOf(i.dibuatOleh)) + '</td><td data-l="Nominal" class="r nw bold">' + rp(i.total) + '</td>' +
+          '<td data-l="Status"><span class="pill ' + esc(ds) + '">' + esc(STATUS_ID[ds] || ds) + '</span></td><td data-l="Aksi" class="nol r"><a class="eye" href="#/item-list" aria-label="Lihat">' + icon('eye', 'sm') + '</a></td></tr>';
+      }).join('');
 
       return '<div class="grid g4" style="margin-bottom:24px">' +
-        kpi('wallet', 'Total bulan ini', rp(totalBulan), bulanIni.length + ' item') +
-        kpi('send', 'Menunggu finalisasi', cnt('Submitted'), 'Submitted', '#/item-list?status=Submitted') +
-        kpi('alert', 'Perlu revisi', cnt('Revision'), 'Revision', '#/revision-center') +
-        kpi('check', 'Final', items.filter(i => i.status === 'Final' && !i.laporanId).length, 'belum dicetak', '#/item-list?status=Final') + '</div>' +
+        kpi('wallet', 'blue', 'Total Pengeluaran Bulan Ini', rp(totalBulan), 'file', bulanIni.length + ' Transaksi', '#/item-list') +
+        kpi('clock', 'blue', 'Menunggu Finalisasi', cnt('Submitted'), '', 'Menunggu Persetujuan', '#/item-list?status=Submitted') +
+        kpi('alert', 'orange', 'Perlu Revisi', cnt('Revision'), '', 'Perlu Perbaikan', '#/revision-center') +
+        kpi('check', 'green', 'Final', items.filter(i => i.status === 'Final' && !i.laporanId).length, '', 'Siap Dicetak', '#/item-list?status=Final') + '</div>' +
         '<div class="grid g-main" style="margin-bottom:24px">' +
-        '<div class="card"><div class="card-h"><h3>Pengeluaran 6 bulan terakhir</h3><span class="muted small">Total per bulan (Rp)</span></div><div class="card-b">' + barChart + '</div></div>' +
-        '<div class="card"><div class="card-h"><h3>Per kategori (bulan ini)</h3></div><div class="card-b" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;justify-content:center">' + donut + '<div class="legend" style="flex:1;min-width:190px">' + legend + '</div></div></div></div>' +
-        '<div class="card"><div class="card-h"><h3>Aktivitas terbaru</h3><a class="btn sm" href="#/item-list">Lihat semua</a></div>' +
-        (rows ? '<div class="tbl-wrap"><table class="tbl-cards"><tbody>' + rows + '</tbody></table></div>' : emptyState('Belum ada data. Mulai dengan input pengeluaran pertama.')) + '</div>';
+        '<div class="card"><div class="card-h"><h3 class="ttl">' + icon('trend') + ' Tren Pengeluaran ' + (D.range === '12' ? '12 Bulan' : D.range === 'ytd' ? 'Tahun Ini' : '6 Bulan Terakhir') + '</h3>' + seg + '</div><div class="card-b">' + barChart + '</div></div>' +
+        '<div class="card"><div class="card-h"><h3 class="ttl">' + icon('dashboard') + ' Pengeluaran per Kategori</h3><select class="in sm" id="cm" style="width:auto">' + mOpts.join('') + '</select></div><div class="card-b">' +
+        '<div class="catsum"><div><small>Total Pengeluaran</small><b>' + rp(totalSel) + '</b></div><div class="sep"></div><div class="kc"><b>' + cats.length + ' Kategori</b></div></div>' +
+        '<div class="cr ch"><span>Kategori</span><span></span><span class="cp">Persentase</span><span class="cv">Nominal</span></div>' + catRows + '</div></div></div>' +
+        '<div class="card"><div class="card-h"><h3 class="ttl">' + icon('list') + ' Transaksi Pengeluaran Terbaru</h3><a class="lnk" href="#/item-list">Lihat Semua ' + icon('right', 'sm') + '</a></div>' +
+        (rows ? '<div class="tbl-wrap"><table class="tbl-cards"><thead><tr><th>Tanggal</th><th>No. Pengajuan</th><th>Keterangan</th><th>Kategori</th><th>Pemohon</th><th class="r">Nominal</th><th>Status</th><th class="r">Aksi</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : emptyState('Belum ada data. Mulai dengan input pengeluaran pertama.')) + '</div>';
     },
-    mount(root) { root.addEventListener('click', e => { const t = e.target.closest('[data-go]'); if (t) location.hash = t.dataset.go; }); }
+    mount(root) {
+      root.addEventListener('click', e => {
+        const r = e.target.closest('[data-r]'); if (r) { D.range = r.dataset.r; return App.rerender(); }
+        const t = e.target.closest('[data-go]'); if (t && !e.target.closest('a')) location.hash = t.dataset.go;
+      });
+      const cm = $('#cm', root); if (cm) cm.onchange = () => { D.catMonth = cm.value; App.rerender(); };
+    }
   };
-  function kpi(ic, label, val, sub, go) {
-    return '<div class="card kpi" ' + (go ? 'data-go="' + go + '" style="cursor:pointer"' : '') + '><div class="l">' + icon(ic, 'sm') + ' ' + label + '</div><div class="v">' + val + '</div><div class="s">' + sub + '</div></div>';
+  function kpi(ic, tone, label, val, subIc, sub, go) {
+    return '<div class="card kpi" data-go="' + go + '"><div class="ki ' + tone + '">' + icon(ic) + '</div><div class="kb"><div class="l">' + label + '</div><div class="v">' + val + '</div><div class="s">' + (subIc ? icon(subIc, 'sm') + ' ' : '') + sub + '</div></div><span class="ka">' + icon('right', 'sm') + '</span></div>';
   }
   function emptyState(msg) { return '<div class="empty">' + icon('file', 'lg') + '<div style="margin-top:8px">' + esc(msg) + '</div></div>'; }
   window.emptyState = emptyState;

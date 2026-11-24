@@ -49,7 +49,7 @@
     ['ttd_ack', 'Acknowledge By (Head Department)'], ['ttd_check', 'Checked By (FAT Dept)'], ['ttd_approve', 'Approve By (KTT)']];
   const PR_HEAD = [['kepada', 'To'], ['dari', 'From'], ['departemen', 'Departement'], ['tanggal', 'Date', 'date'], ['perihal', 'Subject']];
   const PR_SIGN = [['req', 'Requested by'], ['rev', 'Review by'], ['ack', 'Acknowledge By'], ['apr', 'Approved by']];
-  const R = { jenis: 'REIMB_SBA', tambahPpn: false, nomor: '', sel: new Set(), hideDone: true, busy: false, f: {}, ov: {} };
+  const R = { jenis: 'REIMB_SBA', tambahPpn: false, nomor: '', sel: new Set(), hideDone: true, kat: '', page: 1, busy: false, f: {}, ov: {} };
 
   function dflt(jenis) {
     const P = Store.s.pengaturan, nm = P.NAMA_PEMBUAT || (Api.user && Api.user.nama) || '';
@@ -64,7 +64,7 @@
   Views.reports = {
     title: 'Laporan', pre: null, live: false,
     cands() {
-      return Store.s.items.filter(i => i.status === 'Final' && (!R.hideDone || !i.laporanId || R.sel.has(i.id))).sort((a, b) => String(a.tanggal).localeCompare(String(b.tanggal)));
+      return Store.s.items.filter(i => i.status === 'Final' && (!R.kat || i.kategori === R.kat) && (!R.hideDone || !i.laporanId || R.sel.has(i.id))).sort((a, b) => String(a.tanggal).localeCompare(String(b.tanggal)));
     },
     line(it) {
       let sub = it.subtotal, ppn = it.ppn, tot = it.total;
@@ -83,14 +83,17 @@
       if (this.pre) { R.sel = new Set(this.pre); R.hideDone = false; this.pre = null; }
       [...R.sel].forEach(id => { const i = Store.item(id); if (!i || i.status !== 'Final') R.sel.delete(id); });
       const pr = R.jenis === 'PR';
-      return '<div class="grid g-main"><div class="card"><div class="card-h"><h3>1. Pilih item Final</h3><label class="small muted" style="display:flex;gap:6px;align-items:center"><input type="checkbox" class="chk" id="hd" ' + (R.hideDone ? 'checked' : '') + '> sembunyikan yang sudah dicetak</label></div><div class="tbl-wrap" id="cl" style="max-height:420px"></div></div>' +
+      const kats = [...new Set(Store.s.items.filter(i => i.status === 'Final').map(i => i.kategori).filter(Boolean))].sort();
+      if (R.kat && kats.indexOf(R.kat) < 0) R.kat = '';
+      const katOpts = kats.map(k => '<option ' + (k === R.kat ? 'selected' : '') + '>' + esc(k) + '</option>').join('');
+      return '<div class="grid g-main"><div class="card"><div class="card-h"><h3>1. Pilih item Final</h3><select class="in sm" id="kf" style="width:auto;max-width:200px" aria-label="Filter kategori"><option value="">Semua kategori</option>' + katOpts + '</select><label class="small muted" style="display:flex;gap:6px;align-items:center"><input type="checkbox" class="chk" id="hd" ' + (R.hideDone ? 'checked' : '') + '> sembunyikan yang sudah dicetak</label></div><div class="tbl-wrap" id="cl" style="max-height:420px"></div></div>' +
         '<div class="card"><div class="card-h"><h3>2. Data formulir</h3></div><div class="card-b"><div class="row">' +
         '<div class="field"><label>Jenis laporan</label><div class="seg" id="sj"><button data-j="REIMB_SBA" class="' + (!pr ? 'on' : '') + '">SBA / Reimbursement</button><button data-j="PR" class="' + (pr ? 'on' : '') + '">Purchase Request</button></div></div>' +
         '<div class="field"><label>' + (pr ? 'No. PR' : 'No. REIMBURSE / RBA') + '</label><input class="in" id="rn" maxlength="80" value="' + esc(R.nomor) + '" placeholder="' + (pr ? 'mis. 055/PR/HRGA/VIII/2026' : 'mis. 012/SBA/HRGA/VIII/2026') + '"><div class="muted small">Diketik manual. Dikosongkan = kolom nomor pada formulir tidak diisi.</div></div>' +
         '<div id="ff">' + this.fieldsHtml() + '</div>' +
         '<label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer"><input type="checkbox" class="chk" id="rp" style="margin-top:3px" ' + (R.tambahPpn ? 'checked' : '') + '><span><b>Tambah PPN ' + (Store.s.pengaturan.PPN_PERSEN || 11) + '%</b><br><span class="muted small">Hanya untuk item Non-PPN saat dicetak. Item Include/Exclude tidak berubah.</span></span></label>' +
         '<div class="sum tn" id="rs"></div>' +
-        '<button class="btn teal" id="gen">' + icon('download', 'sm') + ' Buat PDF &amp; Excel</button></div></div></div></div>' +
+        '<button class="btn teal" id="gen">' + icon('download', 'sm') + ' Buat PDF</button></div></div></div></div>' +
         '<div class="card" style="margin-top:24px"><div class="card-h"><h3>3. Pratinjau &amp; isian per baris</h3><span class="muted small" id="pcnt"></span></div><div class="tbl-wrap" id="pv"></div></div>' +
         '<div class="card" style="margin-top:24px"><div class="card-h"><h3>Riwayat laporan</h3></div><div class="tbl-wrap" id="hist"></div></div>';
     },
@@ -124,11 +127,24 @@
         $('#pv', root).innerHTML = its.length ? '<table><thead><tr>' + head + '</tr></thead><tbody>' + rows + '</tbody><tfoot><tr><td colspan="' + (pr ? 6 : 5) + '" class="r bold">' + (pr ? 'Grand Total' : 'TOTAL EXPENSES') + '</td><td class="r bold">' + rp(Tt) + '</td><td colspan="' + (pr ? 2 : 1) + '"></td></tr></tfoot></table>' : emptyState('Pilih item untuk melihat pratinjau.');
         drawSum();
       };
+      const PER = 10;
       const drawHist = () => {
         const h = Store.s.laporan.slice().sort((a, b) => String(b.dibuatPada).localeCompare(String(a.dibuatPada)));
+        const pages = Math.max(1, Math.ceil(h.length / PER));
+        R.page = Math.min(Math.max(1, R.page), pages);
+        const cur = h.slice((R.page - 1) * PER, R.page * PER);
+        const nums = []; for (let p = 1; p <= pages; p++) if (p === 1 || p === pages || Math.abs(p - R.page) <= 1) nums.push(p);
+        let pg = '';
+        if (pages > 1) {
+          let last = 0;
+          pg = '<div class="pager"><span class="muted small">' + ((R.page - 1) * PER + 1) + '–' + Math.min(R.page * PER, h.length) + ' dari ' + h.length + ' laporan</span><div class="pg">' +
+            '<button class="btn sm" data-pg="' + (R.page - 1) + '" ' + (R.page <= 1 ? 'disabled' : '') + '>‹ Prev</button>' +
+            nums.map(p => { const gap = p - last > 1 ? '<span class="muted">…</span>' : ''; last = p; return gap + '<button class="btn sm ' + (p === R.page ? 'pri' : '') + '" data-pg="' + p + '">' + p + '</button>'; }).join('') +
+            '<button class="btn sm" data-pg="' + (R.page + 1) + '" ' + (R.page >= pages ? 'disabled' : '') + '>Next ›</button></div></div>';
+        }
         $('#hist', root).innerHTML = h.length ? '<table class="tbl-cards"><thead><tr><th>Nomor</th><th>Jenis</th><th>Periode</th><th class="r">Item</th><th class="r">Total</th><th>Dibuat</th><th></th></tr></thead><tbody>' +
-          h.map(l => '<tr><td data-l="Nomor"><span class="bold">' + esc(l.nomor || l.id) + '</span>' + (l.nomor ? '<div class="muted small">' + esc(l.id) + '</div>' : '') + '</td><td data-l="Jenis">' + (l.jenis === 'PR' ? 'Purchase Request' : 'SBA / Reimb') + '</td><td data-l="Periode">' + esc(l.periode) + '</td><td data-l="Item" class="r">' + esc(l.jumlahItem) + '</td><td data-l="Total" class="r">' + rp(l.total) + '</td><td data-l="Dibuat">' + fmtWaktu(l.dibuatPada) + '<div class="muted small">' + esc(l.dibuatOleh) + '</div></td>' +
-            '<td class="nol r" style="white-space:nowrap"><button class="btn sm" data-ed="' + esc(l.id) + '">' + icon('edit', 'sm') + ' Edit</button> <button class="btn sm" data-dl="pdf:' + esc(l.id) + '">' + icon('download', 'sm') + ' PDF</button> <button class="btn sm" data-dl="xlsx:' + esc(l.id) + '">' + icon('download', 'sm') + ' Excel</button></td></tr>').join('') + '</tbody></table>' : emptyState('Belum ada laporan yang dibuat.');
+          cur.map(l => '<tr><td data-l="Nomor"><span class="bold">' + esc(l.nomor || l.id) + '</span>' + (l.nomor ? '<div class="muted small">' + esc(l.id) + '</div>' : '') + '</td><td data-l="Jenis">' + (l.jenis === 'PR' ? 'Purchase Request' : 'SBA / Reimb') + '</td><td data-l="Periode">' + esc(l.periode) + '</td><td data-l="Item" class="r">' + esc(l.jumlahItem) + '</td><td data-l="Total" class="r">' + rp(l.total) + '</td><td data-l="Dibuat">' + fmtWaktu(l.dibuatPada) + '<div class="muted small">' + esc(l.dibuatOleh) + '</div></td>' +
+            '<td class="nol r" style="white-space:nowrap"><button class="btn sm" data-ed="' + esc(l.id) + '">' + icon('edit', 'sm') + ' Edit</button> <button class="btn sm" data-dl="pdf:' + esc(l.id) + '">' + icon('download', 'sm') + ' PDF</button></td></tr>').join('') + '</tbody></table>' + pg : emptyState('Belum ada laporan yang dibuat.');
       };
       drawList(); drawPrev(); drawHist();
       root.addEventListener('change', e => {
@@ -136,6 +152,7 @@
         if (t.matches('[data-s]')) { t.checked ? R.sel.add(t.dataset.s) : R.sel.delete(t.dataset.s); drawPrev(); }
         if (t.id === 'all') { self.cands().forEach(i => t.checked ? R.sel.add(i.id) : R.sel.delete(i.id)); drawList(); drawPrev(); }
         if (t.id === 'hd') { R.hideDone = t.checked; drawList(); }
+        if (t.id === 'kf') { R.kat = t.value; drawList(); }
         if (t.id === 'rp') { R.tambahPpn = t.checked; drawPrev(); }
       });
       root.addEventListener('input', e => {
@@ -153,12 +170,14 @@
           catch (err) { toast(err.message, 'err'); } finally { btnBusy(dl, false); }
           return;
         }
+        const pgb = e.target.closest('[data-pg]');
+        if (pgb && !pgb.disabled) { R.page = Number(pgb.dataset.pg); drawHist(); return; }
         const ed = e.target.closest('[data-ed]');
         if (ed) { self.edit(ed.dataset.ed, drawHist); return; }
         if (e.target.closest('#gen')) self.generate(root, drawList, drawPrev, drawHist);
       });
     },
-    // ---- Edit laporan di Riwayat (buat ulang PDF/Excel dengan nomor yang sama) ----
+    // ---- Edit laporan di Riwayat (buat ulang PDF dengan nomor yang sama) ----
     edit(id, drawHist) {
       const lap = Store.s.laporan.find(x => x.id === id); if (!lap) return;
       const pr = lap.jenis === 'PR';
@@ -210,13 +229,13 @@
       const ov = {}; ids.forEach(id => { if (R.ov[id]) ov[id] = R.ov[id]; });
       try {
         const lap = await Api.call('laporan.generate', { jenis: R.jenis, itemIds: ids, tambahPpn: R.tambahPpn, nomor: R.nomor.trim(), meta: FM(), ov }, { timeout: 200000 });
-        Store.s.laporan.unshift(lap);
+        Store.s.laporan.unshift(lap); R.page = 1;
         ids.forEach(id => { const i = Store.item(id); if (i) i.laporanId = lap.id; delete R.ov[id]; });
         R.sel.clear(); R.nomor = ''; Store.touch(); Sync.run();
         toast('Laporan ' + (lap.nomor || lap.id) + ' siap ✓', 'ok');
         drawList(); drawPrev(); drawHist(); const rn = $('#rn', root); if (rn) rn.value = '';
         openModal({
-          title: 'Laporan siap diunduh', body: '<p style="margin-top:0"><b>' + esc(lap.nomor || lap.id) + '</b> · ' + lap.jumlahItem + ' item · ' + rp(lap.total) + '</p><div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn pri" data-d="pdf">' + icon('download', 'sm') + ' Unduh PDF</button><button class="btn" data-d="xlsx">' + icon('download', 'sm') + ' Unduh Excel</button></div>',
+          title: 'Laporan siap diunduh', body: '<p style="margin-top:0"><b>' + esc(lap.nomor || lap.id) + '</b> · ' + lap.jumlahItem + ' item · ' + rp(lap.total) + '</p><div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn pri" data-d="pdf">' + icon('download', 'sm') + ' Unduh PDF</button></div>',
           onMount: m => { m.addEventListener('click', async ev => { const b = ev.target.closest('[data-d]'); if (!b) return; btnBusy(b, true, '…'); try { const f = await Api.call('laporan.file', { id: lap.id, format: b.dataset.d }, { timeout: 120000, retry: 1 }); download(f.name, f.mime, f.base64); } catch (er) { toast(er.message, 'err'); } btnBusy(b, false); }); }
         });
       } catch (e) { toast(e.message, 'err', 8000); }
