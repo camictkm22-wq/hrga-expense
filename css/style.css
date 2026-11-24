@@ -258,3 +258,8 @@ td.nw{white-space:nowrap}
 .kpi .v{font-size:clamp(17px,1.75vw,24px)}.ki{width:clamp(42px,4vw,56px);height:clamp(42px,4vw,56px)}
 .catsum b{white-space:nowrap;font-size:clamp(14px,1.3vw,18px)}
 @media(max-width:767px){.kpi .v{font-size:17px}.ki{width:38px;height:38px}}
+
+/* Laporan: daftar pilih item setinggi formulir di sebelahnya */
+.pick{display:flex;flex-direction:column}
+.pick #cl{max-height:420px;overflow:auto}
+@media(min-width:1024px){.pick{contain:size;min-height:480px}.pick #cl{flex:1;min-height:0;max-height:none}}

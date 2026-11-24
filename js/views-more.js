@@ -64,7 +64,7 @@
   Views.reports = {
     title: 'Laporan', pre: null, live: false,
     cands() {
-      return Store.s.items.filter(i => i.status === 'Final' && (!R.kat || i.kategori === R.kat) && (!R.hideDone || !i.laporanId || R.sel.has(i.id))).sort((a, b) => String(a.tanggal).localeCompare(String(b.tanggal)));
+      return Store.s.items.filter(i => i.status === 'Final' && (!R.kat || i.kategori === R.kat) && (!R.hideDone || !i.laporanId || R.sel.has(i.id))).sort((a, b) => String(b.tanggal).localeCompare(String(a.tanggal)) || String(b.dibuatPada || '').localeCompare(String(a.dibuatPada || '')) || String(b.id).localeCompare(String(a.id)));
     },
     line(it) {
       let sub = it.subtotal, ppn = it.ppn, tot = it.total;
@@ -86,7 +86,7 @@
       const kats = [...new Set(Store.s.items.filter(i => i.status === 'Final').map(i => i.kategori).filter(Boolean))].sort();
       if (R.kat && kats.indexOf(R.kat) < 0) R.kat = '';
       const katOpts = kats.map(k => '<option ' + (k === R.kat ? 'selected' : '') + '>' + esc(k) + '</option>').join('');
-      return '<div class="grid g-main"><div class="card"><div class="card-h"><h3>1. Pilih item Final</h3><select class="in sm" id="kf" style="width:auto;max-width:200px" aria-label="Filter kategori"><option value="">Semua kategori</option>' + katOpts + '</select><label class="small muted" style="display:flex;gap:6px;align-items:center"><input type="checkbox" class="chk" id="hd" ' + (R.hideDone ? 'checked' : '') + '> sembunyikan yang sudah dicetak</label></div><div class="tbl-wrap" id="cl" style="max-height:420px"></div></div>' +
+      return '<div class="grid g-main"><div class="card pick"><div class="card-h"><h3>1. Pilih item Final</h3><select class="in sm" id="kf" style="width:auto;max-width:200px" aria-label="Filter kategori"><option value="">Semua kategori</option>' + katOpts + '</select><label class="small muted" style="display:flex;gap:6px;align-items:center"><input type="checkbox" class="chk" id="hd" ' + (R.hideDone ? 'checked' : '') + '> sembunyikan yang sudah dicetak</label></div><div class="tbl-wrap" id="cl"></div></div>' +
         '<div class="card"><div class="card-h"><h3>2. Data formulir</h3></div><div class="card-b"><div class="row">' +
         '<div class="field"><label>Jenis laporan</label><div class="seg" id="sj"><button data-j="REIMB_SBA" class="' + (!pr ? 'on' : '') + '">SBA / Reimbursement</button><button data-j="PR" class="' + (pr ? 'on' : '') + '">Purchase Request</button></div></div>' +
         '<div class="field"><label>' + (pr ? 'No. PR' : 'No. REIMBURSE / RBA') + '</label><input class="in" id="rn" maxlength="80" value="' + esc(R.nomor) + '" placeholder="' + (pr ? 'mis. 055/PR/HRGA/VIII/2026' : 'mis. 012/SBA/HRGA/VIII/2026') + '"><div class="muted small">Diketik manual. Dikosongkan = kolom nomor pada formulir tidak diisi.</div></div>' +
