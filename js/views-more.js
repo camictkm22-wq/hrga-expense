@@ -45,9 +45,9 @@
   // =========================================================
   // LAPORAN (SBA / PR)
   // =========================================================
-  const SBA_F = [['karyawan', "Nama karyawan (Employee's Name)"], ['tujuan', 'Business Purpose'], ['departemen', 'Department'], ['rba', 'RBA Amount (opsional)', 'num'],
+  const SBA_F = [['perusahaan', 'Perusahaan (opsional)'], ['karyawan', "Nama karyawan (Employee's Name)"], ['tujuan', 'Business Purpose'], ['departemen', 'Department'], ['rba', 'RBA Amount (opsional)', 'num'],
     ['ttd_ack', 'Acknowledge By (Head Department)'], ['ttd_check', 'Checked By (FAT Dept)'], ['ttd_approve', 'Approve By (KTT)']];
-  const PR_HEAD = [['kepada', 'To'], ['dari', 'From'], ['departemen', 'Departement'], ['tanggal', 'Date', 'date'], ['perihal', 'Subject']];
+  const PR_HEAD = [['perusahaan', 'Perusahaan (opsional)'], ['kepada', 'To'], ['dari', 'From'], ['departemen', 'Departement'], ['tanggal', 'Date', 'date'], ['perihal', 'Subject']];
   const PR_SIGN = [['req', 'Requested by'], ['rev', 'Review by'], ['ack', 'Acknowledge By'], ['apr', 'Approved by']];
   const R = { jenis: 'REIMB_SBA', tambahPpn: false, nomor: '', sel: new Set(), hideDone: true, kat: '', page: 1, busy: false, f: {}, ov: {} };
 
@@ -72,7 +72,7 @@
       return { sub, ppn, tot };
     },
     fieldsHtml() {
-      const f = FM(), inp = (k, l, t) => '<div class="field"><label>' + l + '</label><input class="in" data-f="' + k + '" type="' + (t === 'date' ? 'date' : 'text') + '" ' + (t === 'num' ? 'inputmode="numeric" placeholder="0"' : '') + ' value="' + esc(f[k] || '') + '" maxlength="200"></div>';
+      const f = FM(), inp = (k, l, t) => '<div class="field"><label>' + l + '</label><input class="in" data-f="' + k + '" type="' + (t === 'date' ? 'date' : 'text') + '" ' + (t === 'num' ? 'inputmode="numeric" placeholder="0"' : (k === 'perusahaan' ? 'placeholder="' + esc(Store.s.pengaturan.NAMA_PERUSAHAAN || 'Nama perusahaan') + ' (bawaan)"' : '')) + ' value="' + esc(f[k] || '') + '" maxlength="200"></div>';
       if (R.jenis === 'PR') {
         return '<div class="row r2">' + PR_HEAD.map(x => inp(x[0], x[1], x[2])).join('') + '</div>' +
           '<div class="muted small" style="margin-top:4px">Penandatangan</div><div class="row r2">' + PR_SIGN.map(x => inp(x[0] + '_nama', x[1] + ' — nama') + inp(x[0] + '_jabatan', x[1] + ' — jabatan')).join('') + '</div>';
@@ -121,7 +121,7 @@
         const rows = its.map((it, n) => {
           const l = self.line(it); Tt += l.tot;
           return pr ? '<tr><td>' + (n + 1) + '</td><td class="desc">' + esc(it.deskripsi) + '</td><td>' + oi(it.id, 'pn', '-', 70) + '</td><td class="r">' + esc(it.qty) + '</td><td>' + esc(it.satuan) + '</td><td class="r">' + rp(it.harga) + '</td><td class="r bold">' + rp(l.tot) + '</td><td>' + oi(it.id, 'io', '-', 90) + '</td><td>' + oi(it.id, 'remarks', it.catatan || '', 160) + '</td></tr>' :
-            '<tr><td style="white-space:nowrap">' + fmtTglEn(it.tanggal) + '</td><td class="desc">' + esc(it.deskripsi) + '</td><td>' + esc(it.kategori) + '</td><td class="r">' + esc(it.qty) + '</td><td class="r">' + rp(it.harga) + '</td><td class="r bold">' + rp(l.tot) + '</td><td>' + oi(it.id, 'remarks', it.catatan || '', 180) + '</td></tr>';
+            '<tr><td style="white-space:nowrap">' + fmtTglEn(it.tanggal) + '</td><td class="desc">' + esc(it.deskripsi) + '</td><td>' + esc(it.satuan || '-') + '</td><td class="r">' + esc(it.qty) + '</td><td class="r">' + rp(it.harga) + '</td><td class="r bold">' + rp(l.tot) + '</td><td>' + oi(it.id, 'remarks', it.catatan || '', 180) + '</td></tr>';
         }).join('');
         const head = pr ? '<th>No</th><th>Description</th><th>P/N</th><th class="r">Qty</th><th>UoM</th><th class="r">Price</th><th class="r">Total</th><th>Internal Order</th><th>Remarks</th>' : '<th>Date</th><th>Description</th><th>Category</th><th class="r">Qty</th><th class="r">Unit Price</th><th class="r">Total Amount</th><th>Remarks</th>';
         $('#pv', root).innerHTML = its.length ? '<table><thead><tr>' + head + '</tr></thead><tbody>' + rows + '</tbody><tfoot><tr><td colspan="' + (pr ? 6 : 5) + '" class="r bold">' + (pr ? 'Grand Total' : 'TOTAL EXPENSES') + '</td><td class="r bold">' + rp(Tt) + '</td><td colspan="' + (pr ? 2 : 1) + '"></td></tr></tfoot></table>' : emptyState('Pilih item untuk melihat pratinjau.');
@@ -188,7 +188,7 @@
       const ids = String(lap.itemIds || '').split(',').filter(Boolean);
       const its = ids.map(i => Store.item(i)).filter(Boolean);
       const hilang = ids.length - its.length, bukanFinal = its.filter(i => i.status !== 'Final').length;
-      const inp = (k, l, t) => '<div class="field"><label>' + l + '</label><input class="in" data-ef="' + k + '" type="' + (t === 'date' ? 'date' : 'text') + '" ' + (t === 'num' ? 'inputmode="numeric" placeholder="0"' : '') + ' value="' + esc(f[k] || '') + '" maxlength="200"></div>';
+      const inp = (k, l, t) => '<div class="field"><label>' + l + '</label><input class="in" data-ef="' + k + '" type="' + (t === 'date' ? 'date' : 'text') + '" ' + (t === 'num' ? 'inputmode="numeric" placeholder="0"' : (k === 'perusahaan' ? 'placeholder="' + esc(Store.s.pengaturan.NAMA_PERUSAHAAN || 'Nama perusahaan') + ' (bawaan)"' : '')) + ' value="' + esc(f[k] || '') + '" maxlength="200"></div>';
       const fields = pr
         ? '<div class="row r2">' + PR_HEAD.map(x => inp(x[0], x[1], x[2])).join('') + '</div><div class="muted small" style="margin-top:4px">Penandatangan</div><div class="row r2">' + PR_SIGN.map(x => inp(x[0] + '_nama', x[1] + ' — nama') + inp(x[0] + '_jabatan', x[1] + ' — jabatan')).join('') + '</div>'
         : '<div class="row r2">' + SBA_F.map(x => inp(x[0], x[1], x[2])).join('') + '</div>';
